@@ -1,6 +1,6 @@
 # Amazon Bedrock AgentCore Runtime Container for Threadback MCP Server (M9)
-# Base image: Python 3.10 slim targeting linux/arm64 (AgentCore MCP runtime requirement)
-FROM --platform=linux/arm64 python:3.10-slim
+# Base image: Python 3.10 slim
+FROM python:3.10-slim
 
 # Prevent Python from writing .pyc files and enable unbuffered logging
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -40,3 +40,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
 
 # Launch uvicorn server binding to 0.0.0.0:$PORT
 CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT} --log-level info"]
+
