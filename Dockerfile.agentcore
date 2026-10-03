@@ -21,13 +21,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy dependency specifications and install
-COPY backend/pyproject.toml backend/README.md ./
+# Copy dependency specifications and application source, then install
+COPY backend/pyproject.toml ./
+COPY backend/app ./app
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir .
-
-# Copy backend application source
-COPY backend/app ./app
 
 # Set permissions for non-root user
 RUN chown -R threadback:threadback /app
