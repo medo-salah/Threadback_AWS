@@ -5,7 +5,6 @@ FROM python:3.10-slim
 # Prevent Python from writing .pyc files and enable unbuffered logging
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PORT=8000 \
     HOST=0.0.0.0 \
     APP_ENV=production \
     AUTH_ENABLED=true \
@@ -32,12 +31,12 @@ RUN chown -R threadback:threadback /app
 USER threadback
 
 # Expose service port
-EXPOSE 8000
+EXPOSE 8080
 
 # Health check using the /health endpoint
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD curl -f http://localhost:${PORT}/health || exit 1
+    CMD curl -f http://localhost:8080/health || exit 1
 
-# Launch uvicorn server binding to 0.0.0.0:$PORT
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT} --log-level info"]
+# Launch uvicorn server binding to 0.0.0.0:8080
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080", "--log-level", "info"]
 
