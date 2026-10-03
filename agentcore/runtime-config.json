@@ -1,0 +1,76 @@
+{
+  "name": "threadback-mcp-server",
+  "version": "1.0.0",
+  "description": "Threadback Deterministic Personal-Context MCP Server for Amazon Bedrock AgentCore Runtime & Alexa+",
+  "runtime": {
+    "type": "CONTAINER",
+    "architecture": "ARM64",
+    "port": 8000,
+    "healthCheckPath": "/health",
+    "environment": {
+      "HOST": "0.0.0.0",
+      "PORT": "8000",
+      "APP_ENV": "production",
+      "AUTH_ENABLED": "true",
+      "MCP_STATELESS": "true",
+      "LOG_LEVEL": "info"
+    }
+  },
+  "mcp": {
+    "transport": "STREAMABLE_HTTP",
+    "path": "/mcp",
+    "protocolVersion": "2025-11-25",
+    "stateless": true,
+    "tools": [
+      {
+        "name": "discover_unfinished_threads",
+        "description": "Discover open intention threads requiring attention, filtered by minimum staleness days and optional limit."
+      },
+      {
+        "name": "get_thread_context",
+        "description": "Retrieve comprehensive contextual details and historical events for a specific intention thread."
+      },
+      {
+        "name": "find_thread_blockers",
+        "description": "Identify external dependencies, missing prerequisites, or waiting conditions that block progress."
+      },
+      {
+        "name": "analyze_thread",
+        "description": "Perform deterministic intent and evidence analysis on a thread, computing confidence, staleness, and blocker severity."
+      },
+      {
+        "name": "suggest_next_action",
+        "description": "Determine the single recommended next action to advance an intention thread, with deterministic confidence and rationale."
+      },
+      {
+        "name": "prepare_action",
+        "description": "Prepare a structured, safe ActionProposal with explicit confirmation boundaries and human-reviewable payload. Pre-execution only."
+      },
+      {
+        "name": "execute_action",
+        "description": "Execute an approved ActionProposal in a safe, controlled simulated environment. Requires proposal ID and explicit confirmation."
+      }
+    ]
+  },
+  "security": {
+    "authMode": "CUSTOM_JWT",
+    "customJwt": {
+      "issuer": "https://cognito-idp.us-east-1.amazonaws.com/${COGNITO_USER_POOL_ID}",
+      "audience": "${COGNITO_APP_CLIENT_ID}",
+      "jwksUri": "https://cognito-idp.us-east-1.amazonaws.com/${COGNITO_USER_POOL_ID}/.well-known/jwks.json",
+      "tokenType": "Bearer",
+      "headerName": "Authorization",
+      "allowQueryToken": false
+    },
+    "metadataEndpoints": {
+      "protectedResource": "/.well-known/oauth-protected-resource",
+      "authorizationServer": "/.well-known/oauth-authorization-server"
+    }
+  },
+  "alexaPlus": {
+    "integrationMode": "STREAMABLE_HTTP_MCP",
+    "codeChallengeMethod": "S256",
+    "scopes": ["mcp:read", "mcp:write"],
+    "targetLatencyMs": 500
+  }
+}

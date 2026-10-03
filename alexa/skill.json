@@ -1,0 +1,56 @@
+{
+  "manifest": {
+    "publishingInformation": {
+      "locales": {
+        "en-US": {
+          "name": "Threadback Intention Recovery",
+          "summary": "Recover unfinished life intentions, identify blockers, and safely resolve open loops.",
+          "description": "Discover unfinished intention threads, reconstruct their context, identify blockers, suggest the next action, prepare a safe action proposal, and execute the approved proposal in a simulated environment.",
+          "keywords": [
+            "intention-recovery",
+            "open-loops",
+            "productivity",
+            "task-tracking",
+            "mcp",
+            "agentcore"
+          ]
+        }
+      },
+      "category": "ORGANIZERS_AND_ASSISTANTS",
+      "distributionCountries": ["US"]
+    },
+    "apis": {
+      "mcp": {
+        "endpoint": {
+          "uri": "https://agentcore.us-east-1.amazonaws.com/runtimes/threadback-mcp-runtime/mcp",
+          "transport": "STREAMABLE_HTTP",
+          "protocolVersion": "2025-11-25"
+        },
+        "targetLatencyMs": 500,
+        "protectedResourceMetadata": "https://agentcore.us-east-1.amazonaws.com/runtimes/threadback-mcp-runtime/.well-known/oauth-protected-resource"
+      }
+    },
+    "accountLinking": {
+      "type": "OAUTH2_1_PKCE",
+      "authorizationUrl": "https://cognito-idp.us-east-1.amazonaws.com/oauth2/authorize",
+      "tokenUrl": "https://cognito-idp.us-east-1.amazonaws.com/oauth2/token",
+      "codeChallengeMethods": ["S256"],
+      "scopes": ["mcp:read", "mcp:write"],
+      "resource": "https://agentcore.us-east-1.amazonaws.com/runtimes/threadback-mcp-runtime/mcp",
+      "authHeaderFormat": "Bearer",
+      "unsupportedMechanisms": [
+        "DYNAMIC_CLIENT_REGISTRATION",
+        "CIMD",
+        "OIDC_USERINFO",
+        "STEP_UP_AUTH",
+        "WWW_AUTHENTICATE_IN_LINKING"
+      ]
+    },
+    "privacyAndCompliance": {
+      "allowsPurchases": false,
+      "usesPersonalInfo": true,
+      "isChildDirected": false,
+      "containsAds": false
+    }
+  }
+}

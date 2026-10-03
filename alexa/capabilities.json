@@ -1,0 +1,123 @@
+{
+  "system": "Threadback",
+  "version": "1.0.0",
+  "mcpEndpoint": "/mcp",
+  "safetyModel": {
+    "executionMode": "SIMULATED",
+    "confirmationRequired": true,
+    "sourceOfTruth": "DETERMINISTIC_DOMAIN_ENGINE",
+    "forbiddenExternalActions": [
+      "REAL_EMAIL",
+      "REAL_SMS",
+      "WHATSAPP",
+      "PHONE_CALLS",
+      "CALENDAR_MODIFICATION",
+      "PAYMENTS",
+      "BROWSER_AUTOMATION",
+      "ARBITRARY_HTTP"
+    ]
+  },
+  "experiences": [
+    {
+      "id": "EXPERIENCE_A_DISCOVERY",
+      "name": "Discovery",
+      "sampleUtterances": [
+        "What am I forgetting?",
+        "What open loops do I have?",
+        "Show me my unfinished threads."
+      ],
+      "orchestrationSequence": [
+        "discover_unfinished_threads",
+        "analyze_thread",
+        "natural_language_explanation"
+      ],
+      "toolsInvoked": [
+        "discover_unfinished_threads",
+        "analyze_thread"
+      ]
+    },
+    {
+      "id": "EXPERIENCE_B_CONTEXT_RECONSTRUCTION",
+      "name": "Context Reconstruction",
+      "sampleUtterances": [
+        "Where did I leave off with my university application?",
+        "What's the status of the Stanford application?",
+        "Reconstruct the context of my thread."
+      ],
+      "orchestrationSequence": [
+        "discover_unfinished_threads",
+        "identify_relevant_thread",
+        "get_thread_context",
+        "analyze_thread",
+        "explain_context"
+      ],
+      "toolsInvoked": [
+        "discover_unfinished_threads",
+        "get_thread_context",
+        "analyze_thread"
+      ]
+    },
+    {
+      "id": "EXPERIENCE_C_BLOCKER_IDENTIFICATION",
+      "name": "Blocker Identification",
+      "sampleUtterances": [
+        "What's blocking my application?",
+        "Why is my thread stuck?",
+        "What am I waiting on?"
+      ],
+      "orchestrationSequence": [
+        "find_thread_blockers",
+        "analyze_thread",
+        "explain_blocker"
+      ],
+      "toolsInvoked": [
+        "find_thread_blockers",
+        "analyze_thread"
+      ]
+    },
+    {
+      "id": "EXPERIENCE_D_NEXT_ACTION",
+      "name": "Next Action",
+      "sampleUtterances": [
+        "What should I do next?",
+        "What is the recommended next step?",
+        "How do I unblock this?"
+      ],
+      "orchestrationSequence": [
+        "analyze_thread",
+        "suggest_next_action",
+        "explain_recommendation"
+      ],
+      "toolsInvoked": [
+        "analyze_thread",
+        "suggest_next_action"
+      ]
+    },
+    {
+      "id": "EXPERIENCE_E_FINISH",
+      "name": "Finish / Safe Simulated Execution",
+      "sampleUtterances": [
+        "Help me finish it.",
+        "Proceed with the recommendation.",
+        "Take care of this for me."
+      ],
+      "orchestrationSequence": [
+        "identify_thread",
+        "suggest_next_action",
+        "prepare_action",
+        "request_confirmation",
+        "execute_action",
+        "explain_simulated_result"
+      ],
+      "toolsInvoked": [
+        "suggest_next_action",
+        "prepare_action",
+        "execute_action"
+      ],
+      "invariants": {
+        "confirmationBoundaryEnforced": true,
+        "simulatedOnly": true
+      }
+    }
+  ]
+}

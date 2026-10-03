@@ -1,0 +1,44 @@
+# Amazon Bedrock AgentCore Runtime Container for Threadback MCP Server (M9)
+# Base image: Python 3.10 slim targeting linux/arm64 (AgentCore MCP runtime requirement)
+FROM --platform=linux/arm64 python:3.10-slim
+
+# Prevent Python from writing .pyc files and enable unbuffered logging
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PORT=8000 \
+    HOST=0.0.0.0 \
+    APP_ENV=production \
+    AUTH_ENABLED=true \
+    MCP_STATELESS=true
+
+# Security: Create non-root system user and group
+RUN groupadd -r threadback && useradd -r -g threadback -d /app -s /sbin/nologin threadback
+
+WORKDIR /app
+
+# Install system dependencies (curl for healthcheck)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy dependency specifications and install
+COPY backend/pyproject.toml backend/README.md ./
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir .
+
+# Copy backend application source
+COPY backend/app ./app
+
+# Set permissions for non-root user
+RUN chown -R threadback:threadback /app
+USER threadback
+
+# Expose service port
+EXPOSE 8000
+
+# Health check using the /health endpoint
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:${PORT}/health || exit 1
+
+# Launch uvicorn server binding to 0.0.0.0:$PORT
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT} --log-level info"]
