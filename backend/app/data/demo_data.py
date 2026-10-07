@@ -1,8 +1,8 @@
 """
-Deterministic demo dataset for Threadback M3.
+Deterministic demo dataset for Threadback M3 / M13.
 
 Provides in-memory, reproducible IntentThread data representing realistic
-personal-context scenarios specified in M0/M3.
+personal-context scenarios specified across M0–M13.
 
 All identifiers, timestamps, confidence scores, and dependency relations
 are fixed and deterministic across runs.
@@ -17,6 +17,7 @@ from app.domain.enums import (
     DependencyStatus,
     EvidenceType,
     Priority,
+    ThreadEventType,
     ThreadStatus,
 )
 from app.domain.models import (
@@ -24,7 +25,9 @@ from app.domain.models import (
     Dependency,
     Event,
     Evidence,
+    IntentEvolution,
     IntentThread,
+    ThreadEvent,
 )
 
 # ---------------------------------------------------------------------------
@@ -45,6 +48,7 @@ _DUE_OCT_12 = datetime(2026, 10, 12, 23, 59, 0, tzinfo=timezone.utc)
 _DUE_OCT_05 = datetime(2026, 10, 5, 17, 0, 0, tzinfo=timezone.utc)
 _DUE_OCT_02 = datetime(2026, 10, 2, 10, 0, 0, tzinfo=timezone.utc)
 _DUE_OCT_01 = datetime(2026, 10, 1, 23, 59, 0, tzinfo=timezone.utc)
+_DUE_NOV_15 = datetime(2026, 11, 15, 0, 0, 0, tzinfo=timezone.utc)
 
 
 def _build_demo_threads() -> list[IntentThread]:
@@ -55,11 +59,14 @@ def _build_demo_threads() -> list[IntentThread]:
             id="thread-university-application",
             title="University Application",
             description="Fall graduate school application requiring letters of recommendation and transcripts",
+            original_goal="Submit fall graduate school application packet with recommendations and personal statement",
+            current_goal="Submit fall graduate school application packet with recommendations and personal statement",
             status=ThreadStatus.BLOCKED,
             priority=Priority.HIGH,
             created_at=_T1,
             updated_at=_T6,
             last_activity_at=_T6,
+            last_interaction_at=_T6,
             confidence=0.94,
             commitments=[
                 Commitment(
@@ -111,16 +118,19 @@ def _build_demo_threads() -> list[IntentThread]:
                 ),
             ],
         ),
-        # Scenario 2: Client Report (WAITING on client response)
+        # Scenario 3: Client Report (WAITING on client response, decay signal demo)
         IntentThread(
             id="thread-client-report",
             title="Client Report",
             description="Q3 client analytics report and deliverables for Acme Corp",
+            original_goal="Deliver finalized Q3 analytics slide deck and deliverables for Acme Corp",
+            current_goal="Deliver finalized Q3 analytics slide deck and deliverables for Acme Corp",
             status=ThreadStatus.WAITING,
             priority=Priority.MEDIUM,
             created_at=_T1,
             updated_at=_T7,
             last_activity_at=_T7,
+            last_interaction_at=_T7,
             confidence=0.88,
             commitments=[
                 Commitment(
@@ -172,16 +182,19 @@ def _build_demo_threads() -> list[IntentThread]:
                 ),
             ],
         ),
-        # Scenario 3: Dentist Appointment (ACTIVE, no blockers)
+        # Scenario 3: Dentist Appointment (ACTIVE, with INTENT EVOLUTION, M13)
         IntentThread(
             id="thread-dentist-appointment",
             title="Dentist Appointment",
             description="Routine dental checkup and teeth cleaning schedule",
+            original_goal="Schedule routine dental checkup",
+            current_goal="Schedule dental checkup and teeth cleaning with Dr. Smith",
             status=ThreadStatus.ACTIVE,
             priority=Priority.MEDIUM,
             created_at=_T4,
             updated_at=_T5,
             last_activity_at=_T5,
+            last_interaction_at=_T5,
             confidence=0.82,
             commitments=[
                 Commitment(
@@ -210,6 +223,17 @@ def _build_demo_threads() -> list[IntentThread]:
                     blocking=False,
                 ),
             ],
+            evolutions=[
+                IntentEvolution(
+                    id="evo-dentist-1",
+                    thread_id="thread-dentist-appointment",
+                    previous_goal="Schedule routine dental checkup",
+                    revised_goal="Schedule dental checkup and teeth cleaning with Dr. Smith",
+                    reason="User decided to include comprehensive cleaning with Dr. Smith",
+                    timestamp=_T5,
+                    trigger_event_id="evt-dentist-evolve-1",
+                ),
+            ],
             events=[
                 Event(
                     id="evt-dentist-1",
@@ -217,18 +241,36 @@ def _build_demo_threads() -> list[IntentThread]:
                     description="Noted need for dental checkup",
                     timestamp=_T4,
                 ),
+                ThreadEvent(
+                    id="evt-dentist-evolve-1",
+                    thread_id="thread-dentist-appointment",
+                    event_type=ThreadEventType.INTENTION_EVOLVED,
+                    type=ThreadEventType.INTENTION_EVOLVED.value,
+                    description="Intention evolved: 'Schedule routine dental checkup' → 'Schedule dental checkup and teeth cleaning with Dr. Smith'",
+                    timestamp=_T5,
+                    actor="user",
+                    source="conversational_agent",
+                    payload={
+                        "previous_goal": "Schedule routine dental checkup",
+                        "revised_goal": "Schedule dental checkup and teeth cleaning with Dr. Smith",
+                        "reason": "User decided to include comprehensive cleaning with Dr. Smith",
+                    },
+                ),
             ],
         ),
-        # Scenario 4: AWS Hackathon (ACTIVE, HIGH priority)
+        # Scenario 5: AWS Hackathon (ACTIVE, HIGH priority, Top Focus demo)
         IntentThread(
             id="thread-aws-hackathon",
             title="AWS Hackathon",
             description="Build and submit Threadback prototype for the Alexa+ hackathon track",
+            original_goal="Build and submit Threadback prototype for the Alexa+ hackathon track",
+            current_goal="Build and submit Threadback prototype for the Alexa+ hackathon track",
             status=ThreadStatus.ACTIVE,
             priority=Priority.HIGH,
             created_at=_T3,
             updated_at=_T9,
             last_activity_at=_T9,
+            last_interaction_at=_T9,
             confidence=0.96,
             commitments=[
                 Commitment(
@@ -278,16 +320,19 @@ def _build_demo_threads() -> list[IntentThread]:
                 ),
             ],
         ),
-        # Scenario 5: Historical Completed Thread (for testing exclusion)
+        # Scenario 5: Historical Completed Thread (for testing exclusion and terminal handling)
         IntentThread(
             id="thread-tax-filing-2025",
             title="Tax Filing 2025",
             description="Annual tax return submission for fiscal year 2025",
+            original_goal="Annual tax return submission for fiscal year 2025",
+            current_goal="Annual tax return submission for fiscal year 2025",
             status=ThreadStatus.COMPLETED,
             priority=Priority.HIGH,
             created_at=_T1,
             updated_at=_T6,
             last_activity_at=_T6,
+            last_interaction_at=_T6,
             confidence=0.99,
             commitments=[
                 Commitment(
@@ -323,18 +368,32 @@ def _build_demo_threads() -> list[IntentThread]:
                     description="Tax return accepted by authority",
                     timestamp=_T6,
                 ),
+                ThreadEvent(
+                    id="evt-tax-close-1",
+                    thread_id="thread-tax-filing-2025",
+                    event_type=ThreadEventType.THREAD_COMPLETED,
+                    type=ThreadEventType.THREAD_COMPLETED.value,
+                    description="Annual tax return submission completed and verified",
+                    timestamp=_T6,
+                    actor="system",
+                    source="deterministic_engine",
+                ),
             ],
         ),
-        # Scenario 6: Historical Abandoned Thread (for testing exclusion)
+        # Scenario 6: Historical Abandoned Thread (for testing exclusion and preservation)
         IntentThread(
             id="thread-old-gym-membership",
             title="Old Gym Membership",
             description="Explore renewing discontinued downtown gym membership",
+            original_goal="Explore renewing discontinued downtown gym membership",
+            current_goal="Explore renewing discontinued downtown gym membership",
             status=ThreadStatus.ABANDONED,
             priority=Priority.LOW,
             created_at=_T1,
             updated_at=_T4,
             last_activity_at=_T4,
+            last_interaction_at=_T4,
+            abandoned_reason="Decided to work out from home instead",
             confidence=0.60,
             commitments=[
                 Commitment(
@@ -354,14 +413,179 @@ def _build_demo_threads() -> list[IntentThread]:
                 ),
             ],
         ),
+        # Scenario 7: Professional Certification (DEFERRED, eligible for RESUME, M14)
+        IntentThread(
+            id="thread-professional-certification",
+            title="Professional Certification",
+            description="AWS Solutions Architect Professional certification exam preparation",
+            original_goal="Complete practice exams and pass AWS Solutions Architect Professional exam",
+            current_goal="Complete practice exams and pass AWS Solutions Architect Professional exam",
+            status=ThreadStatus.DEFERRED,
+            priority=Priority.HIGH,
+            created_at=_T1,
+            updated_at=_T7,
+            last_activity_at=_T7,
+            last_interaction_at=_T7,
+            deferred_until=_T6,  # Elapsed deferral timestamp -> RESUMABLE!
+            confidence=0.92,
+            commitments=[
+                Commitment(
+                    id="com-cert-exam",
+                    description="Schedule exam session at authorized testing center",
+                    status=CommitmentStatus.OPEN,
+                    due_at=_DUE_OCT_12,
+                ),
+            ],
+            evidence=[
+                Evidence(
+                    id="evi-cert-study",
+                    type=EvidenceType.DOCUMENT,
+                    description="Completed 5 full practice exam simulations with >85% score",
+                    source="AWS Skill Builder Portal",
+                    created_at=_T7,
+                    confidence=0.95,
+                ),
+            ],
+            dependencies=[],
+            events=[
+                Event(
+                    id="evt-cert-1",
+                    type="PREPARATION_STARTED",
+                    description="Purchased certification study guide and practice tests",
+                    timestamp=_T1,
+                ),
+                ThreadEvent(
+                    id="evt-cert-defer-1",
+                    thread_id="thread-professional-certification",
+                    event_type=ThreadEventType.THREAD_DEFERRED,
+                    type=ThreadEventType.THREAD_DEFERRED.value,
+                    description="Deferred exam preparation until September 25",
+                    timestamp=_T5,
+                    actor="user",
+                    source="conversational_agent",
+                    payload={"deferred_until": _T6.isoformat()},
+                ),
+            ],
+        ),
+    ]
+
+
+def _build_m14_conflict_threads() -> list[IntentThread]:
+    """Additional deterministic threads for M14 cross-thread conflict and briefing scenarios."""
+    return [
+        # Scenario 8: Executive Client Pitch (ACTIVE, HIGH priority, CONFLICT with Board Presentation, M14)
+        IntentThread(
+            id="thread-client-pitch",
+            title="Executive Client Pitch",
+            description="Present enterprise transformation proposal to Acme Corp leadership",
+            original_goal="Deliver executive presentation and secure sign-off on enterprise proposal",
+            current_goal="Deliver executive presentation and secure sign-off on enterprise proposal",
+            status=ThreadStatus.ACTIVE,
+            priority=Priority.HIGH,
+            created_at=_T3,
+            updated_at=_T8,
+            last_activity_at=_T8,
+            last_interaction_at=_T8,
+            confidence=0.94,
+            commitments=[
+                Commitment(
+                    id="com-pitch-rehearsal",
+                    description="Full-day executive committee presentation and Q&A session",
+                    status=CommitmentStatus.OPEN,
+                    due_at=_DUE_OCT_01,
+                ),
+            ],
+            evidence=[
+                Evidence(
+                    id="evi-pitch-deck",
+                    type=EvidenceType.DOCUMENT,
+                    description="Acme Corp Executive Pitch Deck v3.2 finalized",
+                    source="Google Drive / Executive / Pitch.pdf",
+                    created_at=_T8,
+                    confidence=0.96,
+                ),
+            ],
+            dependencies=[
+                Dependency(
+                    id="dep-pitch-boardroom",
+                    description="Executive Boardroom Alpha [EXCLUSIVE_RESOURCE: Executive Boardroom Alpha]",
+                    type="EXCLUSIVE_RESOURCE",
+                    status=DependencyStatus.OPEN,
+                    blocking=True,
+                ),
+            ],
+            events=[
+                Event(
+                    id="evt-pitch-1",
+                    type="PITCH_SCHEDULED",
+                    description="Executive committee agreed to scheduled pitch session",
+                    timestamp=_T8,
+                ),
+            ],
+        ),
+        # Scenario 9: Board Presentation (ACTIVE, HIGH priority, CONFLICT with Client Pitch, M14)
+        IntentThread(
+            id="thread-board-presentation",
+            title="Board Presentation",
+            description="Annual strategic investment review presentation with board of directors",
+            original_goal="Present annual strategic review and budget expansion to the board",
+            current_goal="Present annual strategic review and budget expansion to the board",
+            status=ThreadStatus.ACTIVE,
+            priority=Priority.HIGH,
+            created_at=_T3,
+            updated_at=_T8,
+            last_activity_at=_T8,
+            last_interaction_at=_T8,
+            confidence=0.95,
+            commitments=[
+                Commitment(
+                    id="com-board-review",
+                    description="Full-day board of directors annual strategy review session",
+                    status=CommitmentStatus.OPEN,
+                    due_at=_DUE_OCT_01,
+                ),
+            ],
+            evidence=[
+                Evidence(
+                    id="evi-board-deck",
+                    type=EvidenceType.DOCUMENT,
+                    description="Board Strategy Review Briefing Pack v1.0",
+                    source="Google Drive / Board / Strategy_Review.pdf",
+                    created_at=_T8,
+                    confidence=0.98,
+                ),
+            ],
+            dependencies=[
+                Dependency(
+                    id="dep-board-boardroom",
+                    description="Executive Boardroom Alpha [EXCLUSIVE_RESOURCE: Executive Boardroom Alpha]",
+                    type="EXCLUSIVE_RESOURCE",
+                    status=DependencyStatus.OPEN,
+                    blocking=True,
+                ),
+            ],
+            events=[
+                Event(
+                    id="evt-board-1",
+                    type="BOARD_MEETING_CALLED",
+                    description="Board meeting scheduled for annual investment review",
+                    timestamp=_T8,
+                ),
+            ],
+        ),
     ]
 
 
 def get_demo_threads() -> list[IntentThread]:
     """
-    Return a fresh list of deterministic demo IntentThread instances.
-
-    Each invocation constructs fresh Pydantic models to guarantee that
-    read-only queries and test assertions remain completely isolated.
+    Return a fresh list of deterministic demo IntentThread instances (M0-M13 canonical baseline).
     """
     return _build_demo_threads()
+
+
+def get_m14_demo_threads() -> list[IntentThread]:
+    """
+    Return the comprehensive set of deterministic demo IntentThread instances for M14 scenarios,
+    including defer/resume, deadline/resource conflicts, and multi-thread briefing aggregation.
+    """
+    return _build_demo_threads() + _build_m14_conflict_threads()

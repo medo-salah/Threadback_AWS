@@ -44,7 +44,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 from app.config import settings
 from app.mcp.server import build_mcp_app, mcp_server
-from app.routers import agent, health, oauth_metadata
+from app.routers import agent, copilot, health, oauth_metadata, proactive
 from app.security import MCPAuthenticationMiddleware
 
 # ---------------------------------------------------------------------------
@@ -156,6 +156,8 @@ _fastapi_app.add_middleware(
 _fastapi_app.include_router(health.router)
 _fastapi_app.include_router(agent.router)
 _fastapi_app.include_router(oauth_metadata.router)
+_fastapi_app.include_router(proactive.router)
+_fastapi_app.include_router(copilot.router)
 
 # ---------------------------------------------------------------------------
 # ASGI application entry point

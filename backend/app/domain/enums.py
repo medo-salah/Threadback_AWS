@@ -16,6 +16,7 @@ class ThreadStatus(str, Enum):
     ACTIVE: User or system is actively pursuing this intent thread.
     BLOCKED: Progress is impeded by an unresolved blocking dependency.
     WAITING: Thread is paused awaiting external input, time, or event.
+    DEFERRED: Intent is explicitly postponed or on hold.
     COMPLETED: Intent has been successfully fulfilled and closed.
     ABANDONED: Intent is no longer relevant or has been dismissed.
     """
@@ -24,6 +25,7 @@ class ThreadStatus(str, Enum):
     ACTIVE = "ACTIVE"
     BLOCKED = "BLOCKED"
     WAITING = "WAITING"
+    DEFERRED = "DEFERRED"
     COMPLETED = "COMPLETED"
     ABANDONED = "ABANDONED"
 
@@ -80,11 +82,13 @@ class ConfidenceBand(str, Enum):
 
 
 class AttentionLevel(str, Enum):
-    """Deterministic attention signal level for a thread."""
+    """Deterministic attention signal level for a thread (M0–M14)."""
 
+    CRITICAL = "CRITICAL"
     HIGH = "HIGH"
     MEDIUM = "MEDIUM"
     LOW = "LOW"
+    NONE = "NONE"
 
 
 class UnfinishedReason(str, Enum):
@@ -102,6 +106,33 @@ class UnfinishedReason(str, Enum):
     MISSING_REQUIRED_EVIDENCE = "MISSING_REQUIRED_EVIDENCE"
 
 
+class DecayState(str, Enum):
+    """
+    Deterministic intent decay classification (M13).
+
+    HEALTHY: Active within recent window (< 3 days), no imminent overdue risks.
+    ATTENTION: Inactive 3-7 days or deadline approaching within 72 hours.
+    DECAYING: Inactive 7-14 days or blocked without activity for 4+ days.
+    STALE: Inactive >= 14 days or overdue commitment with week-long inactivity.
+    """
+
+    HEALTHY = "HEALTHY"
+    ATTENTION = "ATTENTION"
+    DECAYING = "DECAYING"
+    STALE = "STALE"
+
+
+class ChangeCategory(str, Enum):
+    """Category of state change detected by the differential engine (M13)."""
+
+    BLOCKER_CHANGE = "BLOCKER_CHANGE"
+    EVIDENCE_CHANGE = "EVIDENCE_CHANGE"
+    COMMITMENT_CHANGE = "COMMITMENT_CHANGE"
+    STATUS_CHANGE = "STATUS_CHANGE"
+    GOAL_CHANGE = "GOAL_CHANGE"
+    ACTION_CHANGE = "ACTION_CHANGE"
+
+
 class NextActionType(str, Enum):
     """
     Deterministic category of next action recommended for an IntentThread.
@@ -111,6 +142,10 @@ class NextActionType(str, Enum):
     FOLLOW_UP_ACTION: Follow-up on a pending external dependency/party while waiting.
     GATHER_EVIDENCE_ACTION: Gathering missing context/evidence when data is insufficient.
     NO_ACTION: No action needed (e.g. thread is completed, abandoned, or closed).
+    EVOLVE_INTENTION: Update the active goal/direction of the intention (M13).
+    DEFER_INTENTION: Explicitly postpone or put intention on hold (M13).
+    RESUME_INTENTION: Resume a deferred intention (M13).
+    ABANDON_INTENTION: Explicitly surrender an intention while preserving history (M13).
     """
 
     DIRECT_NEXT_ACTION = "DIRECT_NEXT_ACTION"
@@ -118,6 +153,10 @@ class NextActionType(str, Enum):
     FOLLOW_UP_ACTION = "FOLLOW_UP_ACTION"
     GATHER_EVIDENCE_ACTION = "GATHER_EVIDENCE_ACTION"
     NO_ACTION = "NO_ACTION"
+    EVOLVE_INTENTION = "EVOLVE_INTENTION"
+    DEFER_INTENTION = "DEFER_INTENTION"
+    RESUME_INTENTION = "RESUME_INTENTION"
+    ABANDON_INTENTION = "ABANDON_INTENTION"
 
 
 class ProposalStatus(str, Enum):
@@ -152,13 +191,17 @@ class RiskLevel(str, Enum):
 
 
 class ExecutionMode(str, Enum):
-    """Execution mode for action proposals (M7).
+    """Execution mode for action proposals (M7 / M13).
 
-    SIMULATED: Controlled simulated execution within Threadback memory.
-               No external side effects, network calls, or third-party mutations.
+    SIMULATED: Controlled simulated execution for external-world operational actions
+               (e.g., send an email, submit an application). No real-world external side effects.
+    PERSISTENT_MUTATION: Durable internal Threadback state mutation (e.g., evolve goal,
+                         defer/resume/abandon thread). Mutates internal SQLite state and appends
+                         lifecycle events after passing confirmation/precondition safety.
     """
 
     SIMULATED = "SIMULATED"
+    PERSISTENT_MUTATION = "PERSISTENT_MUTATION"
 
 
 class ExecutionStatus(str, Enum):
@@ -178,7 +221,7 @@ class ExecutionStatus(str, Enum):
 
 class ThreadEventType(str, Enum):
     """
-    Persistent lifecycle event types for an IntentThread (M10).
+    Persistent lifecycle event types for an IntentThread (M10/M13).
 
     Captures the auditable history of changes to an intention across time.
     """
@@ -194,6 +237,12 @@ class ThreadEventType(str, Enum):
     VERIFICATION_FAILED = "VERIFICATION_FAILED"
     THREAD_COMPLETED = "THREAD_COMPLETED"
     THREAD_ABANDONED = "THREAD_ABANDONED"
+    INTENTION_EVOLVED = "INTENTION_EVOLVED"
+    THREAD_DEFERRED = "THREAD_DEFERRED"
+    THREAD_RESUMED = "THREAD_RESUMED"
+    BLOCKER_RESOLVED = "BLOCKER_RESOLVED"
+    COMMITMENT_ADDED = "COMMITMENT_ADDED"
+    COMMITMENT_COMPLETED = "COMMITMENT_COMPLETED"
 
 
 class ClosureStatus(str, Enum):
@@ -202,3 +251,94 @@ class ClosureStatus(str, Enum):
     COMPLETED = "COMPLETED"
     REJECTED = "REJECTED"
     ALREADY_COMPLETED = "ALREADY_COMPLETED"
+
+
+# ---------------------------------------------------------------------------
+# M14 Proactive Intent Intelligence Enums
+# ---------------------------------------------------------------------------
+
+
+class AttentionReasonCode(str, Enum):
+    """Deterministic typed reason codes for proactive attention candidates (M14)."""
+
+    DEADLINE_APPROACHING = "DEADLINE_APPROACHING"
+    DEADLINE_OVERDUE = "DEADLINE_OVERDUE"
+    INTENT_DECAYING = "INTENT_DECAYING"
+    INTENT_STALE = "INTENT_STALE"
+    BLOCKER_PRESENT = "BLOCKER_PRESENT"
+    COMMITMENT_DUE = "COMMITMENT_DUE"
+    COMMITMENT_OVERDUE = "COMMITMENT_OVERDUE"
+    IMPORTANT_CHANGE = "IMPORTANT_CHANGE"
+    NEW_EVIDENCE = "NEW_EVIDENCE"
+    GOAL_EVOLVED = "GOAL_EVOLVED"
+    THREAD_RESUMABLE = "THREAD_RESUMABLE"
+    LONG_INACTIVITY = "LONG_INACTIVITY"
+    CONFLICTING_INTENT = "CONFLICTING_INTENT"
+
+
+class SignificanceLevel(str, Enum):
+    """Significance classification for detected state changes (M14)."""
+
+    NONE = "NONE"
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
+
+
+class ConflictType(str, Enum):
+    """Conservative deterministic cross-thread conflict classification (M14)."""
+
+    RESOURCE_CONFLICT = "RESOURCE_CONFLICT"
+    TIME_CONFLICT = "TIME_CONFLICT"
+    DEADLINE_CONFLICT = "DEADLINE_CONFLICT"
+    GOAL_CONFLICT = "GOAL_CONFLICT"
+    COMMITMENT_CONFLICT = "COMMITMENT_CONFLICT"
+    NO_CONFLICT_DETERMINED = "NO_CONFLICT_DETERMINED"
+
+
+class ResumeEligibility(str, Enum):
+    """Deterministic resume eligibility classification for deferred threads (M14)."""
+
+    RESUMABLE = "RESUMABLE"
+    NOT_RESUMABLE = "NOT_RESUMABLE"
+    UNKNOWN = "UNKNOWN"
+
+
+class ProactiveTriggerType(str, Enum):
+    """Deterministic proactive trigger condition types (M14)."""
+
+    ATTENTION_THRESHOLD_CROSSED = "ATTENTION_THRESHOLD_CROSSED"
+    DEADLINE_APPROACHING = "DEADLINE_APPROACHING"
+    INTENT_DECAYED = "INTENT_DECAYED"
+    BLOCKER_RESOLVED = "BLOCKER_RESOLVED"
+    THREAD_BECAME_RESUMABLE = "THREAD_BECAME_RESUMABLE"
+    SIGNIFICANT_CHANGE = "SIGNIFICANT_CHANGE"
+    CONFLICT_DETECTED = "CONFLICT_DETECTED"
+
+
+# ---------------------------------------------------------------------------
+# M15 Intent Copilot Enums
+# ---------------------------------------------------------------------------
+
+
+class DecisionCardType(str, Enum):
+    """Categorization of structured intent decision cards (M15)."""
+
+    TOP_PRIORITY = "TOP_PRIORITY"
+    WHY_NOW = "WHY_NOW"
+    WHAT_CHANGED = "WHAT_CHANGED"
+    RESUME = "RESUME"
+    WHAT_IF = "WHAT_IF"
+    TIME_BUDGET = "TIME_BUDGET"
+    SAFE_TO_CLOSE = "SAFE_TO_CLOSE"
+    BLOCKED = "BLOCKED"
+    CONFLICT = "CONFLICT"
+
+
+class WhatIfScenarioType(str, Enum):
+    """Deterministic scenario types for read-only what-if simulations (M15)."""
+
+    IGNORE_TEMPORARILY = "IGNORE_TEMPORARILY"
+    POSTPONE = "POSTPONE"
+    RESOLVE_BLOCKER = "RESOLVE_BLOCKER"
+    CHANGE_GOAL = "CHANGE_GOAL"

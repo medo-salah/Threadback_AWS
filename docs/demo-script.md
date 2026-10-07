@@ -1,180 +1,190 @@
-# Threadback — Live Demo Script & Evaluator Walkthrough
+# Threadback — Final 3-Minute Hackathon Video Pitch Script
 
-**Scenario:** The University Application Intent Recovery  
-**Target Duration:** 3–5 minutes  
-**Audience:** Hackathon Evaluators & Judges
-
----
-
-## Opening (30 Seconds)
-
-> *"Hi everyone. Traditional assistants and to-do apps fail because they treat human commitments as static checkboxes. When you fall behind, they spam notifications without understanding what is actually blocking you.*
-> 
-> *Our core insight is simple: **People don't forget tasks. They forget intentions.***
-> 
-> *Threadback is an intent-recovery agent. It pairs natural conversation with a deterministic, evidence-based engine to reconstruct open loops, identify blockers, safely prepare actions, verify independent evidence, and close intentions."*
+**Format:** High-Impact Pitch Video (NOT a Tutorial)  
+**Strict Maximum:** **3:00**  
+**Spoken Content Target:** **2:34–2:45** (at 135–145 WPM)  
+**Total Video Target:** **2:44–2:55** (with ~10s visual/title buffer)  
+**Audience:** Hackathon Evaluators & Judges  
+**Core Thesis:** *"People don't forget tasks. They forget intentions."*  
+**Exact Spoken Word Count:** **371 words** (UI labels and visual callouts are not counted)
 
 ---
 
-## Live Demonstration Flow
+## 1. Timing & Pacing Calculation
 
-### Phase 1 — Discover
+The global duration is derived directly from the verified **371 spoken words**, with approximately 10 seconds reserved for visual pauses and UI animations:
 
-**Spoken User Input:**
-> *"What am I forgetting?"*
+| Speaking Pace | Spoken Duration | Visual Pauses & Transitions | Total Demonstrated Runtime | Safety Buffer Remaining (Before 3:00) |
+| :---: | :---: | :---: | :---: | :---: |
+| **135 WPM** (Deliberate) | 2 min 45 sec (164.9s) | 10 sec | **2 min 55 sec** (174.9s) | **5 seconds buffer** |
+| **140 WPM** (Natural Pitch) | 2 min 39 sec (159.0s) | 10 sec | **2 min 49 sec** (169.0s) | **11 seconds buffer** |
+| **145 WPM** (Brisk Delivery) | 2 min 34 sec (153.5s) | 10 sec | **2 min 44 sec** (163.5s) | **16 seconds buffer** |
 
-**Behind the Scenes:**
-* Agent orchestrates `discover_unfinished_threads` and `analyze_thread` via MCP.
-* Evaluates attention level and urgency across all open intent threads in SQLite.
-
-**What the Evaluator Should Observe:**
-* Natural-language response summarizing unfinished intentions.
-* Clear highlight of the **University Application** thread (Priority: HIGH, Status: BLOCKED).
-* Conversational context established: session now tracks University Application as active context.
+> **Methodology Note:** The segment timestamps below represent the intended **Target Recording Window** for the demo workflow—including spoken narration, user clicks, UI transitions, and visual pauses—rather than an isolated spoken-duration calculation per individual segment. Global runtime is strictly governed by the verified 371 spoken words.
 
 ---
 
-### Phase 2 — Reconstruct
+## 2. Segment-by-Segment Storyboard
 
-**Spoken User Input:**
-> *"Where did I leave off?"*
-
-**Behind the Scenes:**
-* Agent uses pronoun resolution to anchor `"where did I leave off"` to the University Application thread.
-* Orchestrates `get_thread_context` and `analyze_thread`.
-
-**What the Evaluator Should Observe:**
-* No need to repeat the thread name; natural conversational continuity.
-* Detailed context reconstruction: application deadline, transcripts received, recommendation letter dependency.
-* Status clearly displayed as `BLOCKED`.
-
----
-
-### Phase 3 — Understand Blocker
-
-**Spoken User Input:**
-> *"Why haven't I finished it?"*
-
-**Behind the Scenes:**
-* Agent resolves `"it"` to the active thread and calls `find_thread_blockers`.
-
-**What the Evaluator Should Observe:**
-* Precise root cause explanation: the application is blocked waiting on an external dependency (recommendation letter from Professor Smith).
-* Proactive prompt asking if the user would like a recommended next action.
+| Target Recording Window | Segment | Spoken Words | UI Action & On-Screen Visuals |
+| :---: | :--- | :---: | :--- |
+| **0:00–0:20** | **Hook / The Problem** | 52 | Ambient web UI; checkbox vs. 9-stage lifecycle graphic. |
+| **0:20–0:48** | **Discovery & Context** | 62 | Surfaces University Application (`BLOCKED`); pronoun resolution. **MCP Drawer opens**. |
+| **0:48–1:15** | **Intent Intelligence / Why Now** | 55 | Attention Radar view; Urgency vs. Attention; Why Now explanation badge. |
+| **1:15–1:45** | **Intent Copilot / What-If** | 57 | Counterfactual simulation card; **`SIMULATION — NO STATE CHANGED`** badge; 30m plan. |
+| **1:45–2:15** | **Safe Action Execution** | 63 | Action Proposal pause; confirmation gate; **`SIMULATED EXTERNAL ACTION`** badge. |
+| **2:15–2:38** | **Verification & Safe Closure** | 51 | Admissions portal proof arrives; Rule D **`VERIFIED`** badge; safe transition to **`COMPLETED`**. |
+| **2:38–2:50** | **MCP Track Callout & Close** | 31 | Highlights `/mcp`, Streamable HTTP, Protocol `2025-11-25`, exactly 9 canonical tools. |
+| **2:50–3:00** | **Visual Closing & Safety Margin** | 0 | Title card: Logo, GitHub URL, AWS Hackathon / Alexa+ Track badge. |
 
 ---
 
-### Phase 4 — Decide
+## 3. Word-for-Word Pitch Narration & Visual Actions
 
-**Spoken User Input:**
-> *"What should I do?"*
+### Segment 1: The Hook & The Problem (0:00–0:20)
+*Target Recording Window: 20 seconds · 52 spoken words*
 
-**Behind the Scenes:**
-* Agent calls `suggest_next_action`.
-* Deterministic engine selects an unblocker action based on priority and blocker overlap.
+#### Spoken Narration
+> "People don’t forget tasks. They forget intentions.  
+> Traditional to-do apps fail because checklists can’t capture context. When life intervenes, a checkbox cannot capture why an effort stalled, where you left off, or what's blocking you.  
+> Threadback reconstructs the living intention thread, turning forgotten open loops into clear, verified next steps."
 
-**What the Evaluator Should Observe:**
-* Clear recommended next step: send a follow-up inquiry to Professor Smith.
-* Clear statement that confirmation will be required before execution.
-
----
-
-### Phase 5 — Prepare
-
-**Spoken User Input:**
-> *"Help me finish it."*
-
-**Behind the Scenes:**
-* Agent calls `prepare_action`.
-* Creates an authoritative `ActionProposal` with a unique ID (e.g., `proposal-uni-follow-up-1`), sets status to `CONFIRMATION_REQUIRED`, and pauses.
-
-**What the Evaluator Should Observe:**
-* **Safety Pause**: The agent stops and asks for explicit confirmation.
-* Action details displayed: Proposal ID, Action Type, Risk Level (`MEDIUM`).
-* Explicit safety warning: **Execution is strictly SIMULATED**.
+#### On-Screen Visual Action (Visual-Only)
+* Open on Threadback’s ambient interface in dark mode.
+* Display a brief graphic overlay: a static to-do checkbox (*"Submit Application"*) dissolving into Threadback's continuous 9-stage lifecycle:  
+  `Conversation → Intent → Commitment → Dependency → Unfinished State → Next Action → Evidence → Verification → Closure`.
 
 ---
 
-### Phase 6 — Confirm & Simulate
+### Segment 2: Discovery & Context Reconstruction (0:20–0:48)
+*Target Recording Window: 28 seconds · 62 spoken words*
 
-**Spoken User Input:**
-> *"Yes, go ahead."*
+#### Spoken Narration
+> "Asking Threadback *'What am I forgetting?'* instantly surfaces our open loop: the University Application, currently blocked.  
+> When we follow up with *'Where did I leave off?'*, Threadback resolves the pronoun and reconstructs the full story: the deadline is in five days, transcripts are received, but progress stalled waiting on Professor Smith's recommendation letter. Notice the live MCP activity drawer orchestrating discovery."
 
-**Behind the Scenes:**
-* Agent verifies explicit affirmative confirmation using `is_explicit_confirmation`.
-* Calls `execute_action(proposal_id=..., confirmed=True, execution_mode="SIMULATED")`.
-* Emits a simulated execution event to the thread audit ledger in SQLite.
-
-**What the Evaluator Should Observe:**
-* Simulated execution badge: `⚡ SIMULATED ACTION EXECUTED`.
-* Clear safety notice: **SIMULATED ACTION ≠ VERIFIED COMPLETION**.
-* The thread remains `BLOCKED` in storage. Simulating an email does **not** complete the application.
-
----
-
-### Phase 7 — External Evidence Arrival
-
-**Demonstration Action:**
-* In the live scenario, independent factual evidence arrives (simulated via portal check or direct evidence ingestion).
-* A structured evidence record is added:
-  * Description: *"Recommendation letter received from Ahmed; application submission completed"*
-  * Source: *"Admissions Portal"*
-  * Confidence: *0.99*
-
-**What the Evaluator Should Observe:**
-* Intent memory in SQLite now contains the factual proof needed for completion.
+#### On-Screen Visual Action (Visual-Only)
+* **Action 1:** Click chip: **`Phase 1: What am I forgetting?`**.  
+  *Visual:* Assistant highlights the University Application thread (Priority: `HIGH`, Status: `BLOCKED`).
+* **Visual Telemetry:** Slide-out drawer visibly tags: **`MCP → discover_unfinished_threads`** and **`MCP → analyze_thread`**.
+* **Action 2:** Click chip: **`Phase 2: Where did I leave off?`**.  
+  *Visual:* Context card displays commitments, transcripts evidence, and active blocker (`dep-rec-letter`).
 
 ---
 
-### Phase 8 — Verify Completion
+### Segment 3: Intent Intelligence — Why Now & Radar (0:48–1:15)
+*Target Recording Window: 27 seconds · 55 spoken words*
 
-**Spoken User Input:**
-> *"Is it actually finished?"*
+#### Spoken Narration
+> "Threadback doesn't just sort tasks—it explains them.  
+> On the Intent Intelligence radar, Threadback separates deadline urgency from attention need. It provides explainable 'Why Now' reasoning: this application has an impending deadline and an active external dependency. It also diffs what changed since yesterday, flags cross-thread conflicts, and identifies whether stalled intentions have become resumable."
 
-**Behind the Scenes:**
-* Agent orchestrates `verify_thread_completion`.
-* Deterministic Verification Engine evaluates Rules A through E against SQLite data.
-* Rule D matches: required completion evidence is present, resolving both the blocker and open commitment.
-
-**What the Evaluator Should Observe:**
-* Verification badge: `🔍 DETERMINISTIC VERIFICATION`.
-* Status: **`VERIFIED`** (VERIFIED by deterministic completion rules).
-* Reason: *"All required commitments and blockers resolved by factual evidence."*
-* Thread is ready for safe closure.
-
----
-
-### Phase 9 — Close Intent Thread
-
-**Spoken User Input:**
-> *"Close it."*
-
-**Behind the Scenes:**
-* Agent calls `verify_thread_completion` (to guarantee invariant) followed by `close_thread`.
-* Lifecycle service transitions thread status from `BLOCKED` → `COMPLETED`.
-* Emits final closure audit event.
-
-**What the Evaluator Should Observe:**
-* Completion banner: `🏁 INTENT THREAD COMPLETED`.
-* Full 10-step Chronological Lifecycle Memory rendered in UI:
-  1. Intent Discovered
-  2. Context Reconstructed
-  3. Blocker Identified
-  4. Next Action Suggested
-  5. Action Proposal Prepared
-  6. Explicit Confirmation Validated
-  7. Action Simulated (`SIMULATED ACTION ≠ VERIFIED COMPLETION`)
-  8. Factual Evidence Received
-  9. Completion Deterministically Verified
-  10. Thread Closed & Completed
-* Invariant verified: **`VERIFIED → CLOSED → COMPLETED`**.
+#### On-Screen Visual Action (Visual-Only)
+* **Action:** Click navigation tab: **`Intent Intelligence`**.
+* **Visual:** The proactive dashboard populates:
+  * **Attention Radar**: University Application ranked at `CRITICAL` attention.
+  * **Urgency vs. Attention Matrix**: Visual score gauges contrasting urgency (0.85) and attention (0.95).
+  * **Why Now Explanation**: Highlight badge: *"Impending deadline in 5 days; stalled on external blocker (Professor recommendation letter)."*
+  * **Multi-Horizon Change Diff**: Shows recent changes and unblocked status.
 
 ---
 
-## Demo Reset (For Evaluator Retesting)
+### Segment 4: Intent Copilot — What-If & Time Budget (1:15–1:45)
+*Target Recording Window: 30 seconds · 57 spoken words*
 
-To prove determinism and repeatability:
+#### Spoken Narration
+> "With the Intent Copilot, you can explore decisions before committing.  
+> Asking *'What if I postpone this?'* triggers a counterfactual simulation. Look at the badge: `SIMULATION — NO STATE CHANGED`. It projects downstream consequences with zero database mutation.  
+> Asking *'I have 30 minutes'* allocates a focused time-budget plan, recommending the single highest-leverage action to move forward."
 
-1. Click the **`Reset Demo`** button in the top navigation bar (or `POST /api/agent/demo-reset`).
-2. Observe conversation state cleared and persistent SQLite tables re-seeded to original initial demo state.
-3. Rerun any phase or conversational variation with 100% identical, predictable results.
+#### On-Screen Visual Action (Visual-Only)
+* **Action 1:** Switch to **`Intent Copilot`** tab or click chip: **`🔮 What if I postpone it?`**.  
+  *Visual:* Consequence breakdown card appears.
+* **On-Screen Badge Highlight:** Prominently displays: **`🔮 SIMULATION — NO STATE CHANGED`** (zero database mutation guarantee).
+* **Action 2:** Click chip: **`⏱️ I have 30 minutes`**.  
+  *Visual:* Time budget allocation card renders 15-minute follow-up action.
+
+---
+
+### Segment 5: Safe Action Execution & Confirmation Gate (1:45–2:15)
+*Target Recording Window: 30 seconds · 63 spoken words*
+
+#### Spoken Narration
+> "When ready to act, asking *'Help me finish it'* activates Threadback's safety gate.  
+> Execution pauses, preparing a structured proposal that requires explicit confirmation. Ambiguous replies like 'sounds good' are rejected.  
+> Once confirmed with *'Yes, go ahead'*, Threadback executes under `SIMULATED EXTERNAL ACTION`. No real email was sent; the simulated inquiry is safely logged while the intention remains open in persistent memory."
+
+#### On-Screen Visual Action (Visual-Only)
+* **Action 1:** Click chip: **`Phase 5: Prepare Action`** (*"Help me finish it."*).  
+  *Visual:* `ActionProposal` card renders (`proposal-uni-follow-up-1`, Risk: `MEDIUM`). Status: `CONFIRMATION REQUIRED`. Execution pauses.
+* **Action 2:** Click chip: **`Phase 6: Confirm Action`** (*"Yes, go ahead."*).  
+  *Visual Telemetry:* Telemetry drawer tags: **`MCP → execute_action`**.
+* **On-Screen Badge Highlight:** Prominently displays: **`⚡ SIMULATED ACTION EXECUTED (SIMULATED ACTION ≠ COMPLETION)`**. Thread status remains `BLOCKED`.
+
+---
+
+### Segment 6: Deterministic Verification & Safe Closure (2:15–2:38)
+*Target Recording Window: 23 seconds · 51 spoken words*
+
+#### Spoken Narration
+> "Here is our core trust boundary: **Execution success does not equal completion.**  
+> Later, independent evidence arrives from the admissions portal.  
+> Asking *'Is it actually finished?'* invokes deterministic verification. Rule D validates the proof.  
+> Only after verified evidence can the user close the thread, safely completing the open loop."
+
+#### On-Screen Visual Action (Visual-Only)
+* **Visual Context:** Factual portal evidence arrives in memory (`"Recommendation letter received via Admissions Portal"`).
+* **Action 1:** Click chip: **`Phase 8: Verify Completion`** (*"Is it actually finished?"*).  
+  *Visual:* Badge displays: **`🔍 DETERMINISTIC VERIFICATION: VERIFIED (Rule D satisfied)`**.
+* **Action 2:** Click chip: **`Phase 9: Close Thread`** (*"Close it."*).  
+  *Visual:* Status transitions to **`🏁 INTENT THREAD COMPLETED`**. The 10-step Chronological Lifecycle timeline appears on screen.
+
+---
+
+### Segment 7: Required Track Callout & Closing (2:38–2:50)
+*Target Recording Window: 12 seconds · 31 spoken words*
+
+#### Spoken Narration
+> "Threadback is built around the Model Context Protocol, exposing exactly nine canonical tools over Streamable HTTP at `/mcp`, using protocol version `2025-11-25`.  
+> Threadback turns forgotten intentions into explainable, verified progress."
+
+#### On-Screen Visual Action (Visual-Only)
+* **Visual:** Pan/zoom to the live **MCP Activity Drawer** showing:
+  * Protocol: `2025-11-25`
+  * Transport: `Streamable HTTP`
+  * Endpoint: `/mcp`
+  * Advertised Tools: Exactly 9 canonical domain tools.
+
+---
+
+### Segment 8: Visual Closing & Safety Buffer (2:50–3:00)
+*Target Recording Window: 10 seconds · 0 spoken words*
+
+#### On-Screen Visual Action (Visual-Only)
+* **Closing Title Card:** Threadback Logo · *"People don't forget tasks. They forget intentions."* · Built for AWS Hackathon / Alexa+ Track · GitHub Repository link.
+* **Music / Ambient Fade:** 5–10 seconds of safety margin ensuring clean video cutoff before 3:00.
+
+---
+
+## 4. Technical Invariants & Claim Boundaries
+
+1. **Required Track Technology**:
+   * Model Context Protocol (MCP) protocol `2025-11-25` over Streamable HTTP at `/mcp` with 9 canonical tools.
+2. **Three Core Safety Pillars**:
+   * **`SIMULATED EXTERNAL ACTION`**: Operational actions (emails, applications) are simulated and audit-logged; zero external side effects occur.
+   * **`PERSISTENT THREADBACK MUTATION`**: Internal state mutations persist durably to SQLite via domain services only after explicit user confirmation.
+   * **`VERIFIED COMPLETION`**: `EXECUTION_SUCCESS ≠ COMPLETION`. Completion is strictly verification-gated by deterministic evidence rules.
+3. **Truthful Boundary Claims**:
+   * Local MCP server and conversational parity are **Verified Working**.
+   * Amazon Bedrock + Strands provider is **Integration-Ready**.
+   * Amazon Bedrock AgentCore deployment is **Integration-Ready (Cloud Provisioning Blocked by Sandbox IAM `ViewOnlyAccess`)**.
+   * Amazon Alexa+ Add-on is **Integration-Ready (Pending Partner Toolkit Access)**.
+   * Zero claims of live cloud registry deployment, live Echo hardware testing, or real email/SMS dispatch.
+
+---
+
+## 5. 1-Click Demo Reset (For Evaluator Retesting)
+
+To reset the scenario to its initial state for a fresh recording take:
+1. Click the **`Reset Demo`** button in the top navigation bar, or
+2. Send: `curl -X POST http://localhost:8000/api/agent/demo-reset -H "Content-Type: application/json" -d '{"conversation_id": "session-default"}'`.

@@ -82,6 +82,21 @@ class AgentService:
                 pending_confirmation=response.pending_confirmation,
                 proposal_id=response.proposal_id,
             )
+
+            # Persist M13 conversation checkpoint
+            if session.active_thread_id:
+                try:
+                    from datetime import datetime, timezone
+
+                    from app.services.thread_service import ThreadService
+
+                    ThreadService().set_conversation_checkpoint(
+                        conversation_id=session.conversation_id,
+                        last_seen_at=datetime.now(timezone.utc),
+                    )
+                except Exception as ckpt_err:
+                    logger.debug("Checkpoint persistence notice: %s", ckpt_err)
+
             return response
 
         except MCPConnectionError as exc:

@@ -7,27 +7,36 @@ Commitment, Evidence, Dependency, Event, and tool response models.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from pydantic import BaseModel, Field
 
 from app.domain.enums import (
     AttentionLevel,
+    AttentionReasonCode,
+    ChangeCategory,
     ClosureStatus,
     CommitmentStatus,
     ConfidenceBand,
+    ConflictType,
+    DecayState,
+    DecisionCardType,
     DependencyStatus,
     EvidenceType,
     ExecutionMode,
     ExecutionStatus,
     NextActionType,
     Priority,
+    ProactiveTriggerType,
     ProposalStatus,
+    ResumeEligibility,
     RiskLevel,
+    SignificanceLevel,
     ThreadEventType,
     ThreadStatus,
     UnfinishedReason,
+    WhatIfScenarioType,
 )
 
 
@@ -109,6 +118,96 @@ class ThreadEvent(Event):
         return self.id
 
 
+class IntentEvolution(BaseModel):
+    """Auditable record of how an intention transformed over time (M13)."""
+
+    id: str
+    thread_id: str
+    previous_goal: str
+    revised_goal: str
+    reason: str
+    timestamp: datetime
+    trigger_event_id: str | None = None
+
+
+class IntentDecaySignal(BaseModel):
+    """Deterministic intent decay signal based on inactivity and deadlines (M13)."""
+
+    decay_state: DecayState
+    inactive_days: float
+    days_until_deadline: float | None = None
+    decay_score: float = Field(..., ge=0.0, le=1.0)
+    decay_factors: list[str]
+    explanation: str
+
+
+class StateChangeItem(BaseModel):
+    """Individual state transition detected between two points in time (M13)."""
+
+    category: ChangeCategory
+    description: str
+    timestamp: datetime
+    before_value: str | None = None
+    after_value: str | None = None
+
+
+class ThreadStateDiff(BaseModel):
+    """Differential comparison of thread state over time (M13)."""
+
+    thread_id: str
+    since_timestamp: datetime
+    has_changes: bool
+    changes: list[StateChangeItem]
+    summary: str
+
+
+class IntentRadarItem(BaseModel):
+    """Structured radar item for proactive intent monitoring (M13)."""
+
+    thread_id: str
+    title: str
+    current_goal: str
+    status: ThreadStatus
+    priority: Priority
+    attention_level: AttentionLevel
+    decay_state: DecayState
+    urgency_score: float = Field(..., ge=0.0, le=1.0)
+    primary_signal: str
+    explanation: str
+    recommended_action: str
+
+    @property
+    def radar_score(self) -> int:
+        return int(round(self.urgency_score * 100))
+
+
+class IntentRadarReport(BaseModel):
+    """Comprehensive radar scan across all open intentions (M13)."""
+
+    generated_at: datetime
+    active_threads_count: int
+    items: list[IntentRadarItem]
+    top_focus_thread_id: str | None = None
+    top_focus_reason: str | None = None
+
+
+class IntentSummary(BaseModel):
+    """Structured holistic overview of an intent thread (M13)."""
+
+    thread_id: str
+    title: str
+    original_goal: str
+    current_goal: str
+    status: ThreadStatus
+    progress_percentage: int = Field(..., ge=0, le=100)
+    active_blockers: list[str]
+    completed_commitments: list[str]
+    remaining_commitments: list[str]
+    last_activity_at: datetime
+    decay_state: DecayState
+    recommended_next_step: str
+
+
 class ThreadSummary(BaseModel):
     """Compact summary of an intent thread for discovery and indexing."""
 
@@ -120,6 +219,14 @@ class ThreadSummary(BaseModel):
     last_activity_at: datetime
     open_commitments: int
     open_blockers: int
+
+    # M13 Additive fields (optional with safe defaults)
+    current_goal: str | None = None
+    radar_score: float | None = None
+    decay_state: DecayState | None = None
+    attention_level: AttentionLevel | None = None
+    radar_explanation: str | None = None
+    recommended_focus: bool = False
 
 
 class IntentThread(BaseModel):
@@ -150,6 +257,24 @@ class IntentThread(BaseModel):
     dependencies: list[Dependency] = Field(default_factory=list)
     events: list[ThreadEvent | Event] = Field(default_factory=list)
 
+    # M13 Persistent Intent Memory fields
+    original_goal: str | None = None
+    current_goal: str | None = None
+    last_interaction_at: datetime | None = None
+    deferred_until: datetime | None = None
+    abandoned_reason: str | None = None
+    evolutions: list[IntentEvolution] = Field(default_factory=list)
+
+    def __init__(self, **data: Any) -> None:
+        super().__init__(**data)
+        # Ensure non-null goal fields anchored to description by default
+        if self.original_goal is None:
+            self.original_goal = self.description
+        if self.current_goal is None:
+            self.current_goal = self.description
+        if self.last_interaction_at is None:
+            self.last_interaction_at = self.last_activity_at
+
     @property
     def active_blockers(self) -> list[Dependency]:
         """Return list of active blockers (blocking=True and status=OPEN)."""
@@ -171,6 +296,7 @@ class IntentThread(BaseModel):
             last_activity_at=self.last_activity_at,
             open_commitments=self.open_commitments_count,
             open_blockers=len(self.active_blockers),
+            current_goal=self.current_goal or self.description,
         )
 
 
@@ -467,12 +593,15 @@ class ExecuteActionRequest(BaseModel):
     )
     execution_mode: ExecutionMode = Field(
         default=ExecutionMode.SIMULATED,
-        description="Execution mode. M7 supports only SIMULATED mode.",
+        description=(
+            "Execution mode: SIMULATED for external operational actions, "
+            "or PERSISTENT_MUTATION for Threadback internal state mutations."
+        ),
     )
 
 
 class ExecutionResult(BaseModel):
-    """Structured result of an action execution attempt (M7)."""
+    """Structured result of an action execution attempt (M7 / M13)."""
 
     proposal_id: str = Field(..., description="ID of the executed proposal")
     thread_id: str = Field(..., description="ID of the affected thread")
@@ -483,7 +612,10 @@ class ExecutionResult(BaseModel):
     )
     execution_mode: ExecutionMode = Field(
         default=ExecutionMode.SIMULATED,
-        description="Execution mode (M7 is always SIMULATED)",
+        description=(
+            "Execution mode: SIMULATED for external operational actions, "
+            "PERSISTENT_MUTATION for internal Threadback state mutations."
+        ),
     )
     message: str = Field(..., description="Human-readable outcome description")
     event_id: str | None = Field(
@@ -606,3 +738,222 @@ class CloseThreadResponse(BaseModel):
     message: str
     verification_id: str | None = None
     event_id: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# M14 Proactive Intent Intelligence Domain Models
+# ---------------------------------------------------------------------------
+
+
+class AttentionCandidate(BaseModel):
+    """Deterministic attention candidate representing an intention requiring review (M14)."""
+
+    thread_id: str
+    thread_title: str
+    attention_level: AttentionLevel
+    attention_score: float = Field(..., ge=0.0, le=1.0)
+    urgency_score: float = Field(..., ge=0.0, le=1.0)
+    reason_codes: list[AttentionReasonCode] = Field(default_factory=list)
+    human_readable_explanation: str
+    supporting_evidence_ids: list[str] = Field(default_factory=list)
+    supporting_commitment_ids: list[str] = Field(default_factory=list)
+    blocker_ids: list[str] = Field(default_factory=list)
+    recommended_action_summary: str | None = None
+    generated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class AttentionDelta(BaseModel):
+    """Deterministic differential change analysis since last checkpoint or anchor (M14)."""
+
+    thread_id: str
+    thread_title: str
+    changes: list[StateChangeItem] = Field(default_factory=list)
+    significance_score: float = Field(..., ge=0.0, le=1.0)
+    significance_level: SignificanceLevel
+    reason_codes: list[AttentionReasonCode] = Field(default_factory=list)
+    source_event_ids: list[str] = Field(default_factory=list)
+    evaluated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class IntentConflict(BaseModel):
+    """Conservative deterministic cross-thread conflict representation (M14)."""
+
+    conflict_id: str
+    thread_a_id: str
+    thread_a_title: str
+    thread_b_id: str
+    thread_b_title: str
+    conflict_type: ConflictType
+    severity: Priority
+    explanation: str
+    evidence_ids: list[str] = Field(default_factory=list)
+    detected_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class ResumableCandidate(BaseModel):
+    """Deterministic resume evaluation for a deferred intent thread (M14)."""
+
+    thread_id: str
+    thread_title: str
+    eligibility: ResumeEligibility
+    reason: str
+    supporting_blocker_ids: list[str] = Field(default_factory=list)
+    supporting_evidence_ids: list[str] = Field(default_factory=list)
+    supporting_event_ids: list[str] = Field(default_factory=list)
+    deferred_until: datetime | None = None
+    evaluated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class IntentHealthSummary(BaseModel):
+    """Deterministic aggregate landscape metrics across all user intent threads (M14)."""
+
+    total_active_threads: int
+    healthy_threads: int
+    attention_threads: int
+    decaying_threads: int
+    stale_threads: int
+    blocked_threads: int
+    deferred_threads: int = 0
+    resumable_threads: int
+    conflicts_count: int
+    top_attention_candidates: list[AttentionCandidate] = Field(default_factory=list)
+    generated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class ProactiveBriefing(BaseModel):
+    """Deterministic executive briefing summarizing the proactive intent landscape (M14)."""
+
+    top_attention: list[AttentionCandidate] = Field(default_factory=list)
+    top_changes: list[AttentionDelta] = Field(default_factory=list)
+    top_resumable: list[ResumableCandidate] = Field(default_factory=list)
+    top_conflicts: list[IntentConflict] = Field(default_factory=list)
+    health_summary: IntentHealthSummary
+    briefing_text: str = ""
+    generated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class ProactiveTrigger(BaseModel):
+    """Deterministic proactive trigger condition for internal evaluation (M14)."""
+
+    trigger_id: str
+    trigger_type: ProactiveTriggerType
+    thread_id: str | None = None
+    reason: str
+    candidate_id: str | None = None
+    evaluated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class ProactiveInsightRecord(BaseModel):
+    """Durable deduplication record preventing repetitive insight alerts (M14)."""
+
+    insight_id: str
+    thread_id: str
+    insight_type: str
+    state_fingerprint: str
+    source_event_ids: list[str] = Field(default_factory=list)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+# ---------------------------------------------------------------------------
+# M15 Intent Copilot Models
+# ---------------------------------------------------------------------------
+
+
+class WhatIfSimulationResult(BaseModel):
+    """Read-only deterministic simulation of scenario consequences (M15)."""
+
+    scenario_type: WhatIfScenarioType
+    thread_id: str
+    thread_title: str
+    parameters: dict[str, Any] = Field(default_factory=dict)
+    original_urgency: float
+    simulated_urgency: float
+    original_attention: float
+    simulated_attention: float
+    original_decay_state: str
+    simulated_decay_state: str
+    deadline_impact_description: str
+    blocker_impact_description: str
+    resumability_impact_description: str
+    affected_related_thread_ids: list[str] = Field(default_factory=list)
+    relationship_evidence: list[str] = Field(
+        default_factory=list,
+        description="Explicit structured relationships identifying why each thread is affected",
+    )
+    simulation_summary: str
+    label: str = "SIMULATION — NO STATE CHANGED"
+    simulated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class TimeBudgetRecommendation(BaseModel):
+    """Deterministic recommendation fitting structured work within available time (M15)."""
+
+    available_minutes: int
+    selected_thread_id: str
+    selected_thread_title: str
+    reason: str
+    expected_next_action: str
+    fits_budget: bool
+    is_blocked: bool
+    estimated_duration_minutes: int | None = None
+    confidence: float = 0.90
+
+
+class SafeClosureCandidate(BaseModel):
+    """Read-only assessment of closure safety for an intent thread (M15)."""
+
+    thread_id: str
+    thread_title: str
+    is_safe_to_close: bool
+    completion_evidence_count: int
+    active_blockers_count: int
+    open_commitments_count: int
+    verification_status: str
+    closure_readiness_reason: str
+    next_step: str
+
+
+class IntentDecisionCard(BaseModel):
+    """Structured conversational recommendation card for frontend and copilot (M15)."""
+
+    card_id: str
+    card_type: DecisionCardType
+    thread_id: str | None = None
+    thread_title: str | None = None
+    title: str
+    summary: str
+    evidence_snippets: list[str] = Field(default_factory=list)
+    recommended_action: str | None = None
+    attention_level: AttentionLevel | None = None
+    urgency_score: float | None = None
+    attention_score: float | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class PrioritizedThreadSummary(BaseModel):
+    """Shortlist item for 'What should I do first?' distinguishing Urgency vs Attention (M15)."""
+
+    rank: int
+    thread_id: str
+    thread_title: str
+    priority: Priority
+    attention_level: AttentionLevel
+    urgency_score: float
+    attention_score: float
+    blocker_pressure: float
+    deadline_pressure: float
+    why_it_ranks_high: str
+    recommended_next_step: str
+
+
+class IntentCopilotOverview(BaseModel):
+    """Comprehensive Copilot synthesis response (M15)."""
+
+    primary_recommendation: str
+    ranked_priorities: list[PrioritizedThreadSummary] = Field(default_factory=list)
+    decision_cards: list[IntentDecisionCard] = Field(default_factory=list)
+    resumable_candidates: list[ResumableCandidate] = Field(default_factory=list)
+    safe_closure_candidates: list[SafeClosureCandidate] = Field(default_factory=list)
+    alexa_voice_text: str = ""
+    generated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

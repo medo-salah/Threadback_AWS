@@ -32,17 +32,24 @@ class ConversationSession:
     messages: list[ChatMessage] = field(default_factory=list)
     pending_proposal_id: str | None = None
     pending_thread_id: str | None = None
+    pending_action_type: str | None = None
     active_thread_id: str | None = None
     pending_confirmation: bool = False
+    last_executed_proposal_id: str | None = None
+    last_executed_mode: str | None = None
 
     def add_message(self, role: str, content: str, **metadata: Any) -> None:
         self.messages.append(ChatMessage(role=role, content=content, metadata=metadata))
 
     def set_pending_proposal(
-        self, proposal_id: str, thread_id: str | None = None
+        self,
+        proposal_id: str,
+        thread_id: str | None = None,
+        action_type: str | None = None,
     ) -> None:
         self.pending_proposal_id = proposal_id
         self.pending_thread_id = thread_id
+        self.pending_action_type = action_type
         if thread_id:
             self.active_thread_id = thread_id
         self.pending_confirmation = True
@@ -50,6 +57,7 @@ class ConversationSession:
     def clear_pending(self) -> None:
         self.pending_proposal_id = None
         self.pending_thread_id = None
+        self.pending_action_type = None
         self.pending_confirmation = False
 
 

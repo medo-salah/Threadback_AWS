@@ -4,6 +4,8 @@ Agent request/response models for M8 Agent Orchestration.
 
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic import BaseModel, Field
 
 
@@ -51,6 +53,12 @@ class AgentChatResponse(BaseModel):
     )
     execution_mode: str | None = Field(
         None, description="Execution mode if an action was executed (e.g. SIMULATED)"
+    )
+    radar_report: dict[str, Any] | None = Field(
+        None, description="Optional Intent Radar summary payload (M13)"
+    )
+    diff_summary: dict[str, Any] | None = Field(
+        None, description="Optional What-Changed differential summary payload (M13)"
     )
 
 

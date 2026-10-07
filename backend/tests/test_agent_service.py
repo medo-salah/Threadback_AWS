@@ -187,3 +187,20 @@ async def test_agent_service_explicit_confirmation_without_pending() -> None:
     res = await svc.chat("Yes, go ahead!")
     assert "no action proposal currently awaiting confirmation" in res.message.lower()
     assert res.pending_confirmation is False
+
+
+@pytest.mark.asyncio
+async def test_agent_service_conversation_checkpoint_persistence() -> None:
+    from app.services.thread_service import ThreadService
+
+    err_client = ErrorMCPClient(MCPConnectionError("Should not connect"))
+    svc = AgentService(provider=MockModelProvider(), mcp_client=err_client)
+    session = svc.conversation_manager.get_or_create("conv-ckpt-test-session")
+    session.active_thread_id = "thread-123"
+
+    res = await svc.chat("Yes, go ahead!", conversation_id="conv-ckpt-test-session")
+    assert res.pending_confirmation is False
+
+    repo = ThreadService().repository
+    checkpoint = repo.get_conversation_checkpoint("conv-ckpt-test-session")
+    assert checkpoint is not None

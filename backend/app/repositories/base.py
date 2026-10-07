@@ -11,6 +11,8 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from datetime import datetime
+
     from app.domain.enums import ThreadStatus
     from app.domain.models import (
         ActionProposal,
@@ -18,7 +20,9 @@ if TYPE_CHECKING:
         Dependency,
         Event,
         Evidence,
+        IntentEvolution,
         IntentThread,
+        ProactiveInsightRecord,
         ThreadEvent,
         ThreadVerification,
     )
@@ -109,6 +113,50 @@ class BaseThreadRepository(ABC):
     @abstractmethod
     def get_latest_verification(self, thread_id: str) -> ThreadVerification | None:
         """Retrieve the most recent verification result for a thread."""
+        ...
+
+    @abstractmethod
+    def add_intent_evolution(self, evolution: IntentEvolution) -> None:
+        """Record an intent evolution entry (M13)."""
+        ...
+
+    @abstractmethod
+    def get_intent_evolutions(self, thread_id: str) -> list[IntentEvolution]:
+        """Retrieve chronological intent evolution history for a thread (M13)."""
+        ...
+
+    @abstractmethod
+    def set_conversation_checkpoint(
+        self,
+        conversation_id: str,
+        last_seen_at: datetime,
+        checkpoint_event_id: str | None = None,
+    ) -> None:
+        """Persist a conversation interaction checkpoint (M13)."""
+        ...
+
+    @abstractmethod
+    def get_conversation_checkpoint(self, conversation_id: str) -> datetime | None:
+        """Retrieve the last seen timestamp checkpoint for a conversation (M13)."""
+        ...
+
+    @abstractmethod
+    def record_proactive_insight(self, record: ProactiveInsightRecord) -> None:
+        """Persist a proactive insight record for deduplication (M14)."""
+        ...
+
+    @abstractmethod
+    def get_proactive_insights(
+        self, thread_id: str | None = None, limit: int = 50
+    ) -> list[ProactiveInsightRecord]:
+        """Retrieve proactive insight records, optionally filtered by thread ID (M14)."""
+        ...
+
+    @abstractmethod
+    def is_insight_duplicate(
+        self, thread_id: str, insight_type: str, state_fingerprint: str
+    ) -> bool:
+        """Check if an insight for this thread, type, and state fingerprint already exists (M14)."""
         ...
 
     @abstractmethod

@@ -30,6 +30,8 @@ Demo data
 
 from __future__ import annotations
 
+from typing import Any
+
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from starlette.applications import Starlette
@@ -48,12 +50,23 @@ from app.domain.models import (
 )
 from app.services.action_preparation_service import ActionPreparationService
 from app.services.analysis_service import AnalysisService
+from app.services.attention_engine import AttentionEngine
+from app.services.change_analysis_service import ChangeAnalysisService
+from app.services.conflict_service import ConflictDetectionService
 from app.services.execution_service import ExecutionService
+from app.services.intent_copilot_service import IntentCopilotService
+from app.services.intent_memory_service import IntentMemoryService
+from app.services.intent_radar_service import IntentRadarService
 from app.services.lifecycle_service import LifecycleService
 from app.services.next_action_service import NextActionService
 from app.services.proposal_registry import ProposalRegistry
+from app.services.resume_service import ResumeEligibilityService
+from app.services.safe_closure_assistant import SafeClosureAssistant
 from app.services.thread_service import ThreadNotFoundError, ThreadService
+from app.services.time_budget_service import TimeBudgetService
 from app.services.verification_service import VerificationService
+from app.services.what_if_service import WhatIfService
+from app.services.why_now_service import WhyNowService
 
 # ---------------------------------------------------------------------------
 # Server instance
@@ -77,15 +90,60 @@ thread_service = ThreadService()
 analysis_service = AnalysisService()
 next_action_service = NextActionService(analysis_service)
 proposal_registry = ProposalRegistry(repository=thread_service.repository)
-action_preparation_service = ActionPreparationService(registry=proposal_registry)
-execution_service = ExecutionService(
-    proposal_registry=proposal_registry,
-    thread_service=thread_service,
+action_preparation_service = ActionPreparationService(
+    registry=proposal_registry, repository=thread_service.repository
 )
+intent_memory_service = IntentMemoryService(thread_service=thread_service)
+radar_service = IntentRadarService(thread_service=thread_service)
 verification_service = VerificationService(thread_service=thread_service)
 lifecycle_service = LifecycleService(
     thread_service=thread_service,
     verification_service=verification_service,
+)
+execution_service = ExecutionService(
+    proposal_registry=proposal_registry,
+    thread_service=thread_service,
+    repository=thread_service.repository,
+    intent_memory_service=intent_memory_service,
+    lifecycle_service=lifecycle_service,
+)
+why_now_service = WhyNowService()
+change_analysis_service = ChangeAnalysisService(repository=thread_service.repository)
+resume_service = ResumeEligibilityService()
+conflict_service = ConflictDetectionService()
+attention_engine = AttentionEngine(
+    radar_service=radar_service,
+    repository=thread_service.repository,
+    why_now_service=why_now_service,
+    change_service=change_analysis_service,
+    resume_service=resume_service,
+    conflict_service=conflict_service,
+)
+what_if_service = WhatIfService(
+    radar_service=radar_service,
+    attention_engine=attention_engine,
+    resume_service=resume_service,
+    conflict_service=conflict_service,
+)
+time_budget_service = TimeBudgetService(
+    next_action_service=next_action_service,
+    attention_engine=attention_engine,
+)
+safe_closure_assistant = SafeClosureAssistant(
+    verification_service=verification_service,
+)
+intent_copilot_service = IntentCopilotService(
+    radar_service=radar_service,
+    attention_engine=attention_engine,
+    why_now_service=why_now_service,
+    change_service=change_analysis_service,
+    resume_service=resume_service,
+    conflict_service=conflict_service,
+    next_action_service=next_action_service,
+    verification_service=verification_service,
+    what_if_service=what_if_service,
+    time_budget_service=time_budget_service,
+    closure_assistant=safe_closure_assistant,
 )
 
 # ---------------------------------------------------------------------------
@@ -102,16 +160,17 @@ def discover_unfinished_threads(
 
     Queries the thread repository for open intent threads that require attention or
     action. Completed and abandoned threads are excluded from discovery.
+    Annotates summaries with deterministic M13 Intent Radar scores and decay states.
 
     Args:
-        status: Optional filter by thread status (e.g. 'ACTIVE', 'BLOCKED', 'WAITING').
+        status: Optional filter by thread status (e.g. 'ACTIVE', 'BLOCKED', 'WAITING', 'DEFERRED').
                 Only unfinished statuses match; completed and abandoned are excluded.
         limit: Optional maximum number of threads to return. Must be non-negative.
 
     Returns:
         DiscoverThreadsResponse containing a list of thread summaries with ID, title,
         status, priority, confidence score, last activity timestamp, open commitments
-        count, and open blockers count.
+        count, open blockers count, radar score, and decay state.
 
     Limitations:
         Does not return COMPLETED or ABANDONED threads. Read-only operation.
@@ -121,7 +180,22 @@ def discover_unfinished_threads(
     except ValueError as err:
         raise ToolError(str(err)) from err
 
-    summaries = [t.to_summary() for t in threads]
+    radar_items = radar_service.prioritize_threads(threads)
+    radar_map = {item.thread_id: item for item in radar_items}
+    top_id = radar_items[0].thread_id if radar_items else None
+
+    summaries = []
+    for t in threads:
+        s = t.to_summary()
+        item = radar_map.get(t.id)
+        if item:
+            s.radar_score = item.radar_score
+            s.decay_state = item.decay_state
+            s.attention_level = item.attention_level
+            s.radar_explanation = item.explanation
+            s.recommended_focus = t.id == top_id
+        summaries.append(s)
+
     return DiscoverThreadsResponse(threads=summaries)
 
 
@@ -296,25 +370,25 @@ def suggest_next_action(
 @mcp_server.tool()
 def prepare_action(
     thread_id: str,
+    action_type: str | None = None,
+    parameters: dict[str, Any] | None = None,
 ) -> ActionProposalResponse:
-    """Prepare a structured, reviewable action proposal for an IntentThread.
+    """Prepare a structured, reviewable action proposal for an IntentThread (M6 + M13).
 
-    Converts the deterministic next action suggestion into an explicit, transparent
-    ActionProposal specifying:
-      - title and detailed description
-      - rationale
-      - review status (READY, CONFIRMATION_REQUIRED, or BLOCKED)
-      - risk level (LOW, MEDIUM, or HIGH)
-      - required inputs and preconditions
-      - confirmation reason (if external side effects would occur)
-      - supporting source IDs (evidence, commitments, dependencies)
+    Converts the deterministic next action suggestion OR an explicit M13 typed mutation
+    (EVOLVE_INTENTION, DEFER_INTENTION, RESUME_INTENTION, ABANDON_INTENTION)
+    into an explicit, transparent ActionProposal ready for review and confirmation.
 
     Pre-execution only — does NOT execute actions, send messages, call external
-    APIs, or mutate state. Actual execution is reserved for future milestones.
+    APIs, or mutate state. Actual mutation occurs only when passed to execute_action.
 
     Args:
         thread_id: The unique stable identifier of the intent thread
                    (e.g. 'thread-university-application').
+        action_type: Optional M13 typed action ('EVOLVE_INTENTION', 'DEFER_INTENTION',
+                     'RESUME_INTENTION', 'ABANDON_INTENTION'). Defaults to None.
+        parameters: Optional parameters dictionary (e.g. {'new_goal': '...'} or
+                    {'deferred_until': '...', 'reason': '...'}).
 
     Returns:
         ActionProposalResponse containing the structured ActionProposal ready
@@ -330,15 +404,23 @@ def prepare_action(
     except ThreadNotFoundError as err:
         raise ToolError(f"Thread '{thread_id}' was not found.") from err
 
-    analysis = analysis_service.analyze(thread)
-    suggestion = next_action_service.suggest_action(thread, analysis)
-    proposal = action_preparation_service.prepare_action(thread, suggestion)
+    if action_type:
+        proposal = action_preparation_service.prepare_action(
+            thread=thread,
+            action_type=action_type,
+            parameters=parameters,
+        )
+    else:
+        analysis = analysis_service.analyze(thread)
+        suggestion = next_action_service.suggest_action(thread, analysis)
+        proposal = action_preparation_service.prepare_action(thread, suggestion)
+
     proposal_registry.register(proposal)
     return ActionProposalResponse(proposal=proposal)
 
 
 # ---------------------------------------------------------------------------
-# Tool 7: execute_action (CONTROLLED EXECUTION / SIMULATED, M7)
+# Tool 7: execute_action (CONTROLLED EXECUTION / PERSISTENT MUTATION, M7/M13)
 # ---------------------------------------------------------------------------
 
 
@@ -348,11 +430,11 @@ def execute_action(
     confirmed: bool = False,
     execution_mode: str = "SIMULATED",
 ) -> ExecutionResultResponse:
-    """Execute a prepared action proposal in controlled simulation mode (M7).
+    """Execute a prepared action proposal (M7 / M13).
 
     Validates and executes an existing ActionProposal registered by prepare_action.
     Follows a strict 7-step validation pipeline:
-      1. Proposal existence: proposal must be registered in the in-memory ProposalRegistry.
+      1. Proposal existence: proposal must be registered in the in-memory ProposalRegistry or SQLite repository.
       2. Proposal status: BLOCKED proposals are rejected immediately.
       3. Explicit confirmation: proposals requiring confirmation must have confirmed=True.
          Confirmation is NEVER inferred from context, status, or tool invocation.
@@ -362,21 +444,27 @@ def execute_action(
       7. Idempotency: re-executing an already executed proposal returns ALREADY_EXECUTED
          without generating duplicate audit events.
 
-    Execution boundary:
-      Controlled SIMULATED mode only. Does NOT send emails, SMS, messages, make calls,
-      book appointments, process payments, invoke browser automation, or contact
-      external APIs. Successful simulation creates an auditable internal Event on the thread.
+    Execution taxonomy:
+      A. External-world operational actions (e.g. send email, submit application, unblocker):
+         Executed strictly in SIMULATED mode. Zero external side effects, network calls,
+         or third-party mutations.
+      B. Threadback internal state mutations (EVOLVE_INTENTION, DEFER_INTENTION,
+         RESUME_INTENTION, ABANDON_INTENTION):
+         Executed as PERSISTENT THREADBACK STATE MUTATIONS. Duly mutates internal SQLite
+         state, modifies current goals or thread lifecycle status, and records durable audit events.
+         Persistent Threadback mutation != external-world action.
 
     Args:
         proposal_id: The deterministic ID of the prepared ActionProposal
                      (e.g. 'proposal-d8e12f6a9c40b3e7').
         confirmed: Explicit boolean confirmation. Required if proposal.requires_confirmation is True.
                    Defaults to False.
-        execution_mode: Execution mode string. Must be 'SIMULATED'. Other modes are rejected.
+        execution_mode: Execution mode string ('SIMULATED' or 'PERSISTENT_MUTATION').
+                        Operational actions require SIMULATED mode. External/real execution modes are rejected.
 
     Returns:
         ExecutionResultResponse containing the outcome status (EXECUTED, REJECTED,
-        BLOCKED, or ALREADY_EXECUTED), simulation message, and recorded event_id.
+        BLOCKED, or ALREADY_EXECUTED), execution mode, human-readable outcome message, and recorded event_id.
     """
     result = execution_service.execute_action(
         proposal_id=proposal_id,

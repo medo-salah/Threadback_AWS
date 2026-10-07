@@ -153,6 +153,7 @@ def derive_proposal_id(
     supporting_evidence_ids: list[str],
     supporting_commitment_ids: list[str],
     supporting_dependency_ids: list[str],
+    extra_payload: str = "",
 ) -> str:
     """Deterministically derive a unique, stable ActionProposal ID.
 
@@ -162,6 +163,7 @@ def derive_proposal_id(
       3. sorted supporting_evidence_ids
       4. sorted supporting_commitment_ids
       5. sorted supporting_dependency_ids
+      6. optional extra_payload (for parameterized M13 mutations)
 
     Format:
       proposal-<16-character-sha256-hex>
@@ -169,7 +171,7 @@ def derive_proposal_id(
     Guarantees:
       - 100% deterministic (no random UUIDs, no timestamps, no object IDs).
       - Derived solely from stable domain inputs.
-      - Provides a stable reference for the future M7 execution layer.
+      - Provides a stable reference for execution.
     """
     parts = [
         thread_id,
@@ -178,16 +180,18 @@ def derive_proposal_id(
         ",".join(sorted(supporting_commitment_ids)),
         ",".join(sorted(supporting_dependency_ids)),
     ]
+    if extra_payload:
+        parts.append(extra_payload)
     raw_material = ":".join(parts)
     digest = hashlib.sha256(raw_material.encode("utf-8")).hexdigest()[:16]
     return f"proposal-{digest}"
 
 
 class ActionPreparationService:
-    """Action Preparation & Confirmation Service for IntentThreads (M6).
+    """Action Preparation & Confirmation Service for IntentThreads (M6 + M13).
 
-    Consumes M5 NextActionSuggestion and prepares a transparent, structured ActionProposal
-    ready for human review.
+    Consumes M5 NextActionSuggestion or M13 typed intent actions and prepares
+    a transparent, structured ActionProposal ready for human review.
     Does NOT execute actions.
     """
 
@@ -204,11 +208,13 @@ class ActionPreparationService:
     def prepare_action(
         self,
         thread: IntentThread,
-        suggestion: NextActionSuggestion,
+        suggestion: NextActionSuggestion | None = None,
         reference_time: datetime | None = None,
+        action_type: NextActionType | str | None = None,
+        parameters: dict[str, Any] | None = None,
     ) -> ActionProposal:
         """
-        Prepare a structured ActionProposal from a NextActionSuggestion.
+        Prepare a structured ActionProposal from a NextActionSuggestion or M13 typed action.
 
         Enforces:
           - Non-execution: proposal only.
@@ -221,13 +227,229 @@ class ActionPreparationService:
 
         Args:
             thread: The IntentThread being acted upon.
-            suggestion: The M5 next-action recommendation.
+            suggestion: Optional M5 next-action recommendation.
             reference_time: Optional deterministic reference timestamp.
+            action_type: Optional M13 typed action type (EVOLVE_INTENTION, DEFER_INTENTION, etc.).
+            parameters: Optional parameter payload for typed actions.
 
         Returns:
             ActionProposal structured for human review.
         """
         ref_time = reference_time or DEFAULT_ANALYSIS_REFERENCE_TIME
+
+        # Resolve typed action if specified
+        resolved_action_type: NextActionType | None = None
+        if action_type is not None:
+            resolved_action_type = (
+                action_type
+                if isinstance(action_type, NextActionType)
+                else NextActionType(action_type)
+            )
+
+        # -------------------------------------------------------------------
+        # M13 Typed Mutation Actions
+        # -------------------------------------------------------------------
+        if resolved_action_type == NextActionType.EVOLVE_INTENTION:
+            params = parameters or {}
+            new_goal = (
+                params.get("new_goal") or params.get("revised_goal") or ""
+            ).strip()
+            reason = (params.get("reason") or "User revised active objective").strip()
+            if not new_goal:
+                status = ProposalStatus.BLOCKED
+                description = (
+                    f"Cannot prepare intent evolution for '{thread.title}': "
+                    "revised goal is missing."
+                )
+                rationale = "A clear revised goal is required for intent evolution."
+                preconditions = ["Revised goal must be specified"]
+                requires_confirmation = False
+                confirmation_reason = "Missing revised goal."
+            else:
+                status = ProposalStatus.READY
+                description = (
+                    f"Update active goal for '{thread.title}' to '{new_goal}'. "
+                    f"Reason: {reason}."
+                )
+                rationale = (
+                    f"User instructed goal revision from "
+                    f"'{thread.current_goal or thread.description}' to '{new_goal}'."
+                )
+                preconditions = [
+                    "Thread must not be in terminal status (COMPLETED/ABANDONED)"
+                ]
+                requires_confirmation = False
+                confirmation_reason = None
+
+            proposal_id = derive_proposal_id(
+                thread_id=thread.id,
+                action_type=NextActionType.EVOLVE_INTENTION,
+                supporting_evidence_ids=[],
+                supporting_commitment_ids=[],
+                supporting_dependency_ids=[],
+                extra_payload=new_goal,
+            )
+            proposal = ActionProposal(
+                id=proposal_id,
+                thread_id=thread.id,
+                action_type=NextActionType.EVOLVE_INTENTION,
+                title=f"Evolve goal: {new_goal}" if new_goal else "Evolve intention",
+                description=description,
+                rationale=rationale,
+                status=status,
+                requires_confirmation=requires_confirmation,
+                confirmation_reason=confirmation_reason,
+                inputs={"thread_id": thread.id, "new_goal": new_goal, "reason": reason},
+                preconditions=preconditions,
+                supporting_evidence_ids=[],
+                supporting_commitment_ids=[],
+                supporting_dependency_ids=[],
+                risk_level=RiskLevel.LOW,
+                created_at=ref_time,
+            )
+            if self._repository is not None:
+                self._repository.save_proposal(proposal)
+            if self._registry is not None:
+                self._registry.register(proposal)
+            return proposal
+
+        elif resolved_action_type == NextActionType.DEFER_INTENTION:
+            params = parameters or {}
+            deferred_until = params.get("deferred_until")
+            reason = (params.get("reason") or "Postponed by user").strip()
+            status = ProposalStatus.READY
+            description = (
+                f"Defer thread '{thread.title}' until {deferred_until or 'further notice'}. "
+                f"Reason: {reason}."
+            )
+            rationale = f"User instructed thread postponement: {reason}."
+            proposal_id = derive_proposal_id(
+                thread_id=thread.id,
+                action_type=NextActionType.DEFER_INTENTION,
+                supporting_evidence_ids=[],
+                supporting_commitment_ids=[],
+                supporting_dependency_ids=[],
+                extra_payload=f"{deferred_until or ''}:{reason}",
+            )
+            proposal = ActionProposal(
+                id=proposal_id,
+                thread_id=thread.id,
+                action_type=NextActionType.DEFER_INTENTION,
+                title=f"Defer thread: {thread.title}",
+                description=description,
+                rationale=rationale,
+                status=status,
+                requires_confirmation=False,
+                confirmation_reason=None,
+                inputs={
+                    "thread_id": thread.id,
+                    "deferred_until": deferred_until,
+                    "reason": reason,
+                },
+                preconditions=[
+                    "Thread must not be in terminal status (COMPLETED/ABANDONED)"
+                ],
+                supporting_evidence_ids=[],
+                supporting_commitment_ids=[],
+                supporting_dependency_ids=[],
+                risk_level=RiskLevel.LOW,
+                created_at=ref_time,
+            )
+            if self._repository is not None:
+                self._repository.save_proposal(proposal)
+            if self._registry is not None:
+                self._registry.register(proposal)
+            return proposal
+
+        elif resolved_action_type == NextActionType.RESUME_INTENTION:
+            params = parameters or {}
+            reason = (params.get("reason") or "Resumed by user").strip()
+            status = ProposalStatus.READY
+            description = (
+                f"Resume thread '{thread.title}' back into active lifecycle. "
+                f"Reason: {reason}."
+            )
+            rationale = f"User instructed thread reactivation: {reason}."
+            proposal_id = derive_proposal_id(
+                thread_id=thread.id,
+                action_type=NextActionType.RESUME_INTENTION,
+                supporting_evidence_ids=[],
+                supporting_commitment_ids=[],
+                supporting_dependency_ids=[],
+                extra_payload=reason,
+            )
+            proposal = ActionProposal(
+                id=proposal_id,
+                thread_id=thread.id,
+                action_type=NextActionType.RESUME_INTENTION,
+                title=f"Resume thread: {thread.title}",
+                description=description,
+                rationale=rationale,
+                status=status,
+                requires_confirmation=False,
+                confirmation_reason=None,
+                inputs={"thread_id": thread.id, "reason": reason},
+                preconditions=["Thread must not be in terminal status (COMPLETED)"],
+                supporting_evidence_ids=[],
+                supporting_commitment_ids=[],
+                supporting_dependency_ids=[],
+                risk_level=RiskLevel.LOW,
+                created_at=ref_time,
+            )
+            if self._repository is not None:
+                self._repository.save_proposal(proposal)
+            if self._registry is not None:
+                self._registry.register(proposal)
+            return proposal
+
+        elif resolved_action_type == NextActionType.ABANDON_INTENTION:
+            params = parameters or {}
+            reason = (params.get("reason") or "Abandoned by user").strip()
+            status = ProposalStatus.CONFIRMATION_REQUIRED
+            description = f"Abandon thread '{thread.title}'. Reason: {reason}."
+            rationale = (
+                f"User requested abandonment: {reason}. "
+                "Crucial invariant: all historical evidence and commitments remain intact."
+            )
+            proposal_id = derive_proposal_id(
+                thread_id=thread.id,
+                action_type=NextActionType.ABANDON_INTENTION,
+                supporting_evidence_ids=[],
+                supporting_commitment_ids=[],
+                supporting_dependency_ids=[],
+                extra_payload=reason,
+            )
+            proposal = ActionProposal(
+                id=proposal_id,
+                thread_id=thread.id,
+                action_type=NextActionType.ABANDON_INTENTION,
+                title=f"Abandon thread: {thread.title}",
+                description=description,
+                rationale=rationale,
+                status=status,
+                requires_confirmation=True,
+                confirmation_reason=(
+                    "Abandoning an intention is an explicit lifecycle termination. "
+                    "User confirmation required."
+                ),
+                inputs={"thread_id": thread.id, "reason": reason},
+                preconditions=["Thread must not be in terminal status (COMPLETED)"],
+                supporting_evidence_ids=[],
+                supporting_commitment_ids=[],
+                supporting_dependency_ids=[],
+                risk_level=RiskLevel.MEDIUM,
+                created_at=ref_time,
+            )
+            if self._repository is not None:
+                self._repository.save_proposal(proposal)
+            if self._registry is not None:
+                self._registry.register(proposal)
+            return proposal
+
+        if suggestion is None:
+            raise ValueError(
+                "Either suggestion or a valid M13 action_type must be provided to prepare_action."
+            )
 
         # Find target dependency if referenced
         target_dep: Dependency | None = None

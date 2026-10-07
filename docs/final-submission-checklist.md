@@ -4,59 +4,51 @@ This checklist documents the final audit and verification gate for Threadback pr
 
 ---
 
-## 1. Product & Innovation
+## 1. Submission
 
-- [x] **Core concept clearly explained**: "People don't forget tasks. They forget intentions."
-- [x] **Intent Thread lifecycle demonstrated**: `Conversation → Intent → Commitment → Dependency → Unfinished State → Next Action → Evidence → Verification → Closure`.
-- [x] **9 canonical MCP tools preserved**: Exactly 9 tools advertised at `/mcp`, no additions or removals.
-- [x] **Demo reset works**: Single-click `Reset Demo` button or `POST /api/agent/demo-reset` deterministically restores initial SQLite state.
-- [x] **Canonical demo repeatable**: Multi-turn 9-phase University Application demo executes predictably from clean state.
-
----
-
-## 2. Safety & Invariants
-
-- [x] **Explicit confirmation required**: Actions marked `requires_confirmation=True` pause execution and demand explicit affirmative authorization (`"Yes"`, `"Go ahead"`).
-- [x] **Ambiguity rejected**: Ambiguous or inquisitive responses (`"maybe"`, `"sounds good"`, `"what would that do?"`) are rejected by the confirmation safety analyzer.
-- [x] **Simulated execution only**: Execution mode is hardcoded to `SIMULATED`; no real emails, calls, SMS, or external API side effects occur.
-- [x] **Execution does not imply completion**: Invariant strictly enforced: `EXECUTION_SUCCESS ≠ COMPLETION`. Simulating an action leaves the thread unfinished.
-- [x] **Deterministic verification required**: Completion requires factual structured evidence satisfying Rules A through E.
-- [x] **Protected closure**: Threads can only be closed if backed by a prior successful verification record (`VERIFIED → CLOSED → COMPLETED`).
+- [ ] **Project name**: "Threadback" (clean name without generic subtitles)
+- [ ] **Elevator pitch**: Intention recovery vs. task checklists, context reconstruction, explainable next actions, proactive/counterfactual intelligence
+- [ ] **About/project description**: Comprehensive 10-point description covering problem, solution, 9-stage lifecycle, M13–M15 capabilities, MCP architecture, safety pillars, hackathon updates, and honest boundaries
+- [ ] **Built With**: Concise list (MCP, Python MCP SDK, Streamable HTTP, Bedrock, Strands Agents, Boto3, FastAPI, SQLite, React, TypeScript, Vite, Docker)
+- [ ] **Primary track: Alexa+**: Self-hosted MCP server with 9 canonical tools over Streamable HTTP on protocol `2025-11-25` at `/mcp`
+- [ ] **AWS Builder mini challenge decision**: Documented as **QUALIFIES (Integration-Ready)** based on Bedrock provider architecture, Strands Agents SDK integration, Boto3 integration, and AgentCore ARM64 container packaging
+- [ ] **Open Source mini challenge decision**: Documented as **DOES NOT QUALIFY / EVIDENCE NOT FOUND** (no qualifying separate open-source contribution or secondary repository created during hackathon window)
+- [ ] **GitHub repository URL**: `https://github.com/medo-salah/Threadback_AWS` (includes MIT License, source code, setup/run instructions, sanitized `.env.example`)
+- [ ] **Demo video URL**: Dedicated demo video URL (under 3 minutes) uploaded and linked on Devpost
+- [ ] **Product feedback**: Complete 5-question technical feedback provided for all 4 tools/SDKs used (Python MCP SDK, Strands Agents, Amazon Bedrock / Boto3, AgentCore Packaging)
+- [ ] **Significant-update explanation**: Section "What We Built During the Hackathon" clearly contrasting M0–M12 foundation with M13–M16 advanced additions
 
 ---
 
-## 3. Technical Implementation
+## 2. Technical
 
-- [x] **MCP uses Streamable HTTP**: Native integration with official MCP Python SDK (`mcp`) over Streamable HTTP transport.
-- [x] **`/mcp` endpoint documented**: Endpoint location and MCP protocol version (MCP protocol `2025-11-25` over Streamable HTTP) verified and documented.
-- [x] **SQLite persistence documented**: WAL-mode SQLite database persists threads, commitments, dependencies, evidence, action proposals, and verification records across restarts.
-- [x] **Agent orchestrates existing MCP tools**: Conversational layer routes dialogue to MCP tools without bypassing the domain boundary.
-- [x] **Deterministic domain remains source of truth**: Domain engines (Analysis, NextAction, Prep, Execution, Verification, Lifecycle) remain authoritative for all business logic and state transitions.
-
----
-
-## 4. Alexa+ & AWS Track Alignment
-
-- [x] **Alexa+ relevance documented**: Conversational voice-first interaction model and natural pronoun resolution documented.
-- [x] **MCP architecture documented**: Native compliance with Alexa+ / Bedrock AgentCore MCP architecture.
-- [x] **AgentCore status accurately documented**: Containerized packaging implemented; cloud deployment explicitly classified as Conditional / Frozen due to sandbox IAM permissions (`ViewOnlyAccess`).
-- [x] **No unsupported Alexa+ integration claim**: Repository transparently distinguishes between local verification and pending official partner onboarding.
+- [x] **MCP server working**: Local MCP server verified and tested via automated test suite and live endpoints
+- [x] **`/mcp` endpoint**: Hosted and tested at `/mcp`
+- [x] **Streamable HTTP transport**: Fully functional stateless Streamable HTTP transport
+- [x] **MCP protocol `2025-11-25`**: Native compliance with MCP protocol version `2025-11-25`
+- [x] **9 canonical tools**: Exactly 9 tools advertised at `/mcp` (zero extraneous or omitted tools)
+- [x] **401 tests passing**: 401 / 401 automated tests passing (100% green across M0–M15)
+- [x] **Frontend build clean**: `npm run build` compiles clean production bundle with zero TypeScript errors
+- [x] **Ruff clean**: `ruff check` (0 errors) and `ruff format --check` (0 deviations) across all 87 files
+- [x] **No secrets committed**: No `.env` credentials, API keys, or temporary database files committed
 
 ---
 
-## 5. Demonstration & Evaluator Experience
+## 3. Video
 
-- [x] **Reset procedure documented**: Clear UI button and curl command documented in README and Evaluator Guide.
-- [x] **9-phase script documented**: Complete step-by-step spoken script provided in `docs/demo-script.md`.
-- [x] **Evaluator observation points documented**: Clear checkpoints explaining what happens behind the scenes and what the evaluator should observe at each phase.
+- [x] **<3 minutes**: Spoken script strictly calibrated at 371 words (2:44–2:55 total duration at 135–145 WPM with 10s visual pauses; 5–16s safety margin before 3:00 cutoff)
+- [x] **English narration**: High-impact English voiceover and visual titles
+- [ ] **Public YouTube/Vimeo**: Video uploaded and set to public or unlisted with embed permissions
+- [x] **No unlicensed music/third-party material**: UI-only visuals, synthetic/original audio, zero copyrighted third-party assets
+- [x] **Working product visibly demonstrated**: 9-stage lifecycle, pronoun resolution, Attention Radar, counterfactual simulation, confirmation gating, verification proof, and closure shown in action
+- [x] **MCP clearly visible**: Live MCP Activity Drawer visibly displaying `/mcp`, Streamable HTTP, Protocol `2025-11-25`, and 9 canonical tools
 
 ---
 
-## 6. Quality & Code Cleanliness
+## 4. Claims & Truthful Boundaries
 
-- [x] **Backend tests pass**: 286 / 286 tests passing with zero failures.
-- [x] **Ruff passes**: `ruff check app tests` (0 errors) and `ruff format --check app tests` (0 formatting deviations).
-- [x] **Frontend lint passes**: `npm run lint` with oxlint reports 0 warnings and 0 errors.
-- [x] **Frontend build passes**: `npm run build` compiles clean production bundle with zero TypeScript errors.
-- [x] **No secrets or debug artifacts**: No `.env` credentials, API keys, or temporary files committed.
-- [x] **Repository is clean**: Clean project structure ready for evaluator inspection.
+- [x] **No live AgentCore claim**: Truthfully documented as **Integration-Ready (Cloud Provisioning Blocked by Sandbox IAM `ViewOnlyAccess`)**
+- [x] **No published Alexa+ claim**: Truthfully documented as **Integration-Ready (Pending Partner Toolkit Access)**; positioned on approved self-hosted MCP server path
+- [x] **No Echo hardware claim**: Evaluator-ready web interface demonstrated; no false physical hardware claims
+- [x] **No real external-action claim**: Operational actions explicitly badged as **`SIMULATED EXTERNAL ACTION`**; zero external emails, SMS, or API side effects dispatched
+- [x] **No autonomous-completion claim**: Invariant strictly enforced: **`EXECUTION_SUCCESS ≠ COMPLETION`**; completion requires deterministic Rule A–E verification

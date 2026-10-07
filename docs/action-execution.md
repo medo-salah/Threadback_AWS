@@ -131,11 +131,16 @@ graph TD
 
 ---
 
-## 6. Simulation Mode & Semantics
+## 6. Execution Taxonomy & Semantics (M7 / M13)
 
-M7 introduces exclusively `SIMULATED` execution mode (`ExecutionMode.SIMULATED`). Any other mode (such as `REAL` or `LIVE`) is rejected immediately.
+Threadback distinguishes between two fundamentally different types of actions:
 
-### Action Category Simulation Messages
+### A. External-World Operational Actions (`SIMULATED`)
+Operations intended to interact with or affect the outside world (e.g. sending emails, making phone calls, booking appointments, submitting applications).
+- **Execution Mode:** Strictly `SIMULATED` (`ExecutionMode.SIMULATED`).
+- **Safety Invariant:** Never performs real-world side effects, network calls, or third-party mutations.
+- **Completion Invariant:** `EXECUTION_SUCCESS != VERIFIED_COMPLETION`. Simulated execution creates an internal audit record on the thread but does NOT mark the intention complete.
+
 | Action Category | Outcome Message |
 |---|---|
 | `DIRECT_NEXT_ACTION` | `"The direct next action was simulated successfully."` |
@@ -144,9 +149,18 @@ M7 introduces exclusively `SIMULATED` execution mode (`ExecutionMode.SIMULATED`)
 | `GATHER_EVIDENCE_ACTION` | `"The evidence-gathering action was simulated successfully."` |
 | `NO_ACTION` | *Not executable — returns REJECTED.* |
 
-The system **never** describes simulated execution as real-world delivery.
+The system **never** describes simulated external actions as real-world delivery:
 - ✅ *Correct:* `"The follow-up action was simulated successfully."`
 - ❌ *Incorrect:* `"The email was sent to Acme Corp."`
+
+### B. Threadback Internal State Mutations (`PERSISTENT_MUTATION`)
+Operations that intentionally evolve or transition Threadback's internal memory and lifecycle state:
+- `EVOLVE_INTENTION`: Updates `current_goal` while preserving immutable `original_goal` and appends `INTENTION_EVOLVED` event.
+- `DEFER_INTENTION`: Transitions thread to `DEFERRED` status, sets `deferred_until`, and appends `THREAD_DEFERRED` event.
+- `RESUME_INTENTION`: Transitions thread back to `ACTIVE` status and appends `THREAD_RESUMED` event.
+- `ABANDON_INTENTION`: Explicitly terminates thread to `ABANDONED` status with `abandoned_reason` and appends `THREAD_ABANDONED` event.
+- **Execution Mode:** `PERSISTENT_MUTATION` (`ExecutionMode.PERSISTENT_MUTATION`).
+- **Safety Invariant:** `Persistent Threadback mutation != external-world action`. They intentionally modify durable SQLite storage and append lifecycle/audit events following the standard proposal/confirmation safety gate. They must never be described as simulated external actions.
 
 ---
 
@@ -160,16 +174,16 @@ class ExecutionResult(BaseModel):
     thread_id: str
     action_type: NextActionType
     execution_status: ExecutionStatus  # EXECUTED, REJECTED, BLOCKED, ALREADY_EXECUTED
-    execution_mode: ExecutionMode      # SIMULATED
+    execution_mode: ExecutionMode      # SIMULATED or PERSISTENT_MUTATION
     message: str
     event_id: str | None = None
 ```
 
 ### Execution Statuses
-- `EXECUTED`: Simulation completed successfully.
+- `EXECUTED`: Action executed successfully (in `SIMULATED` mode for operational actions, or `PERSISTENT_MUTATION` mode for internal state mutations).
 - `REJECTED`: Request failed safety validation (unconfirmed, unknown proposal, terminal thread, NO_ACTION, unsupported mode).
 - `BLOCKED`: Request blocked due to failed domain preconditions or blocked proposal status.
-- `ALREADY_EXECUTED`: Proposal previously executed; returned from ledger.
+- `ALREADY_EXECUTED`: Proposal previously executed; returned from ledger / persistent event history (idempotent).
 
 ---
 

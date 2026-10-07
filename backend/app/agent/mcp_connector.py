@@ -109,8 +109,18 @@ class ThreadbackMCPClient:
     async def suggest_next_action(self, thread_id: str) -> dict[str, Any]:
         return await self.call_tool("suggest_next_action", {"thread_id": thread_id})
 
-    async def prepare_action(self, thread_id: str) -> dict[str, Any]:
-        return await self.call_tool("prepare_action", {"thread_id": thread_id})
+    async def prepare_action(
+        self,
+        thread_id: str,
+        action_type: str | None = None,
+        parameters: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        args: dict[str, Any] = {"thread_id": thread_id}
+        if action_type:
+            args["action_type"] = action_type
+        if parameters:
+            args["parameters"] = parameters
+        return await self.call_tool("prepare_action", args)
 
     async def execute_action(
         self,

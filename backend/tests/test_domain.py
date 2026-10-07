@@ -37,12 +37,13 @@ from pydantic import ValidationError
 
 
 def test_thread_status_enum_values() -> None:
-    """Status enum must contain exactly the 6 approved Threadback statuses."""
+    """Status enum must contain the approved Threadback statuses including M13 DEFERRED."""
     expected = {
         "DISCOVERED",
         "ACTIVE",
         "BLOCKED",
         "WAITING",
+        "DEFERRED",
         "COMPLETED",
         "ABANDONED",
     }

@@ -83,8 +83,20 @@ class VerificationService:
     Never mutates thread status during verification.
     """
 
-    def __init__(self, thread_service: ThreadService) -> None:
+    def __init__(self, thread_service: ThreadService | None = None) -> None:
         self._thread_service = thread_service
+
+    def verify_completion(
+        self,
+        thread: IntentThread,
+        reference_time: datetime | None = None,
+    ) -> ThreadVerification:
+        """
+        Deterministically evaluate completion rules A-E on an IntentThread in a read-only manner.
+        Does not mutate thread state or persist verification records.
+        """
+        now = reference_time or datetime.now(timezone.utc)
+        return self._evaluate_rules(thread, now)
 
     def verify_thread(
         self,
@@ -102,8 +114,11 @@ class VerificationService:
             Structured ThreadVerification result.
 
         Raises:
+            ValueError: If thread_service was not provided at initialization.
             ThreadNotFoundError: If the thread ID does not exist.
         """
+        if not self._thread_service:
+            raise ValueError("thread_service is required for verify_thread")
         thread = self._thread_service.get_thread(thread_id)
         now = reference_time or datetime.now(timezone.utc)
 

@@ -9,6 +9,7 @@ Backed by BaseThreadRepository (SQLite by default in M10, with in-memory support
 from __future__ import annotations
 
 from collections.abc import Iterable
+from datetime import datetime
 
 from app.config import settings
 from app.domain.enums import DependencyStatus, ThreadStatus
@@ -78,17 +79,19 @@ class ThreadService:
         self,
         status: str | ThreadStatus | None = None,
         limit: int | None = None,
+        unfinished_only: bool = True,
     ) -> list[IntentThread]:
         """
-        List unfinished intent threads (excludes COMPLETED and ABANDONED).
+        List intent threads. By default returns unfinished intent threads (excludes COMPLETED and ABANDONED).
 
         Args:
-            status: Optional status filter. Only unfinished statuses
-                    (DISCOVERED, ACTIVE, BLOCKED, WAITING) will match.
+            status: Optional status filter.
             limit: Optional non-negative integer maximum number of threads.
+            unfinished_only: If True (default), filters to unfinished statuses only.
+                             If False, returns threads of any status.
 
         Returns:
-            List of matching unfinished IntentThread instances (deep-copied).
+            List of matching IntentThread instances (deep-copied).
 
         Raises:
             ValueError: If status is not a valid ThreadStatus or limit is negative.
@@ -112,7 +115,7 @@ class ThreadService:
         results = self._repository.list_threads(
             status=target_status,
             limit=limit,
-            unfinished_only=True,
+            unfinished_only=unfinished_only,
         )
         for t in results:
             self._threads[t.id] = t
@@ -235,3 +238,21 @@ class ThreadService:
         self._threads = {}
         for t in self._repository.list_threads(unfinished_only=False):
             self._threads[t.id] = t
+
+    def set_conversation_checkpoint(
+        self,
+        conversation_id: str,
+        last_seen_at: datetime | None = None,
+    ) -> None:
+        """Record conversation checkpoint through repository layer."""
+        self._repository.set_conversation_checkpoint(
+            conversation_id=conversation_id,
+            last_seen_at=last_seen_at,
+        )
+
+    def get_conversation_checkpoint(
+        self,
+        conversation_id: str,
+    ) -> datetime | None:
+        """Retrieve conversation checkpoint through repository layer."""
+        return self._repository.get_conversation_checkpoint(conversation_id)

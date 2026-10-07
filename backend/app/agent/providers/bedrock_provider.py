@@ -140,15 +140,26 @@ class BedrockModelProvider(ModelProvider):
 
                 session.clear_pending()
 
-                explanation = (
-                    f"I executed the action in SIMULATION mode.\n\n"
-                    f"• Status: {exec_status}\n"
-                    f"• Execution Mode: {exec_mode} (No real external messages, emails, or calls were made)\n"
-                    f"• Proposal ID: {proposal_id}\n"
-                    f"• Audit Event ID: {event_id}\n"
-                    f"• Details: {result_msg}\n\n"
-                    f"Your thread state and audit log have been updated with this simulated event."
-                )
+                if exec_mode == "PERSISTENT_MUTATION":
+                    explanation = (
+                        f"I have applied this persistent Threadback state mutation.\n\n"
+                        f"• Status: {exec_status}\n"
+                        f"• Execution Mode: {exec_mode} (Durable internal Threadback state mutated)\n"
+                        f"• Proposal ID: {proposal_id}\n"
+                        f"• Audit Event ID: {event_id}\n"
+                        f"• Details: {result_msg}\n\n"
+                        f"Your thread state, database record, and lifecycle event ledger have been permanently updated."
+                    )
+                else:
+                    explanation = (
+                        f"I executed the action in SIMULATION mode.\n\n"
+                        f"• Status: {exec_status}\n"
+                        f"• Execution Mode: {exec_mode} (No real external messages, emails, or calls were made)\n"
+                        f"• Proposal ID: {proposal_id}\n"
+                        f"• Audit Event ID: {event_id}\n"
+                        f"• Details: {result_msg}\n\n"
+                        f"Your thread state and audit log have been updated with this simulated event."
+                    )
 
                 return AgentChatResponse(
                     message=explanation,

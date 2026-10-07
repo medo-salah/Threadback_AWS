@@ -32,7 +32,9 @@ from app.domain.models import (
     Dependency,
     Event,
     Evidence,
+    IntentEvolution,
     IntentThread,
+    ProactiveInsightRecord,
     ThreadEvent,
     ThreadVerification,
 )
@@ -70,7 +72,8 @@ def _iso_to_dt(val: str | None) -> datetime | None:
 class SQLiteThreadRepository(BaseThreadRepository):
     """
     Persistent SQLite storage engine for IntentThreads, evidence, commitments,
-    dependencies, proposals, verifications, and auditable lifecycle event history.
+    dependencies, proposals, verifications, intent evolutions, checkpoints,
+    and auditable lifecycle event history.
     """
 
     def __init__(self, db_path: str = "threadback.db", auto_seed: bool = True) -> None:
@@ -105,7 +108,12 @@ class SQLiteThreadRepository(BaseThreadRepository):
             confidence REAL NOT NULL,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
-            last_activity_at TEXT NOT NULL
+            last_activity_at TEXT NOT NULL,
+            original_goal TEXT,
+            current_goal TEXT,
+            last_interaction_at TEXT,
+            deferred_until TEXT,
+            abandoned_reason TEXT
         );
 
         CREATE TABLE IF NOT EXISTS commitments (
@@ -177,15 +185,69 @@ class SQLiteThreadRepository(BaseThreadRepository):
             verified_at TEXT NOT NULL
         );
 
+        CREATE TABLE IF NOT EXISTS intent_evolutions (
+            id TEXT PRIMARY KEY,
+            thread_id TEXT NOT NULL REFERENCES threads(id) ON DELETE CASCADE,
+            previous_goal TEXT NOT NULL,
+            revised_goal TEXT NOT NULL,
+            reason TEXT NOT NULL,
+            timestamp TEXT NOT NULL,
+            trigger_event_id TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS conversation_checkpoints (
+            conversation_id TEXT PRIMARY KEY,
+            last_seen_at TEXT NOT NULL,
+            checkpoint_event_id TEXT,
+            updated_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS proactive_insights (
+            insight_id TEXT PRIMARY KEY,
+            thread_id TEXT NOT NULL REFERENCES threads(id) ON DELETE CASCADE,
+            insight_type TEXT NOT NULL,
+            state_fingerprint TEXT NOT NULL,
+            source_event_ids TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        );
+
         CREATE INDEX IF NOT EXISTS idx_commitments_thread ON commitments(thread_id);
         CREATE INDEX IF NOT EXISTS idx_evidence_thread ON evidence(thread_id);
         CREATE INDEX IF NOT EXISTS idx_dependencies_thread ON dependencies(thread_id);
         CREATE INDEX IF NOT EXISTS idx_events_thread ON thread_events(thread_id);
         CREATE INDEX IF NOT EXISTS idx_verifications_thread ON thread_verifications(thread_id);
         CREATE INDEX IF NOT EXISTS idx_proposals_thread ON action_proposals(thread_id);
+        CREATE INDEX IF NOT EXISTS idx_intent_evolutions_thread ON intent_evolutions(thread_id);
+        CREATE INDEX IF NOT EXISTS idx_insights_thread ON proactive_insights(thread_id);
+        CREATE INDEX IF NOT EXISTS idx_insights_fingerprint ON proactive_insights(thread_id, insight_type, state_fingerprint);
         """
         with self._conn:
             self._conn.executescript(schema_sql)
+
+            # Safe additive migration for existing databases missing M13 columns
+            cursor = self._conn.execute("PRAGMA table_info(threads);")
+            columns = {row["name"] for row in cursor.fetchall()}
+            if "original_goal" not in columns:
+                self._conn.execute("ALTER TABLE threads ADD COLUMN original_goal TEXT;")
+                self._conn.execute("UPDATE threads SET original_goal = description;")
+            if "current_goal" not in columns:
+                self._conn.execute("ALTER TABLE threads ADD COLUMN current_goal TEXT;")
+                self._conn.execute("UPDATE threads SET current_goal = description;")
+            if "last_interaction_at" not in columns:
+                self._conn.execute(
+                    "ALTER TABLE threads ADD COLUMN last_interaction_at TEXT;"
+                )
+                self._conn.execute(
+                    "UPDATE threads SET last_interaction_at = last_activity_at;"
+                )
+            if "deferred_until" not in columns:
+                self._conn.execute(
+                    "ALTER TABLE threads ADD COLUMN deferred_until TEXT;"
+                )
+            if "abandoned_reason" not in columns:
+                self._conn.execute(
+                    "ALTER TABLE threads ADD COLUMN abandoned_reason TEXT;"
+                )
 
     def _seed_if_empty(self) -> None:
         """Seed demo threads only if the threads table is currently empty."""
@@ -277,6 +339,24 @@ class SQLiteThreadRepository(BaseThreadRepository):
                 )
             )
 
+        # Fetch intent evolutions (M13)
+        evo_rows = self._conn.execute(
+            "SELECT * FROM intent_evolutions WHERE thread_id = ? ORDER BY timestamp ASC;",
+            (thread_id,),
+        ).fetchall()
+        evolutions = [
+            IntentEvolution(
+                id=er["id"],
+                thread_id=er["thread_id"],
+                previous_goal=er["previous_goal"],
+                revised_goal=er["revised_goal"],
+                reason=er["reason"],
+                timestamp=_iso_to_dt(er["timestamp"]) or datetime.now(timezone.utc),
+                trigger_event_id=er["trigger_event_id"],
+            )
+            for er in evo_rows
+        ]
+
         return IntentThread(
             id=row["id"],
             title=row["title"],
@@ -292,6 +372,13 @@ class SQLiteThreadRepository(BaseThreadRepository):
             evidence=evidence_items,
             dependencies=dependencies,
             events=events,
+            original_goal=row["original_goal"] or row["description"],
+            current_goal=row["current_goal"] or row["description"],
+            last_interaction_at=_iso_to_dt(row["last_interaction_at"])
+            or _iso_to_dt(row["last_activity_at"]),
+            deferred_until=_iso_to_dt(row["deferred_until"]),
+            abandoned_reason=row["abandoned_reason"],
+            evolutions=evolutions,
         )
 
     def list_threads(
@@ -337,8 +424,13 @@ class SQLiteThreadRepository(BaseThreadRepository):
             # 1. Upsert thread
             self._conn.execute(
                 """
-                INSERT INTO threads (id, title, description, status, priority, confidence, created_at, updated_at, last_activity_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO threads (
+                    id, title, description, status, priority, confidence,
+                    created_at, updated_at, last_activity_at,
+                    original_goal, current_goal, last_interaction_at,
+                    deferred_until, abandoned_reason
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     title=excluded.title,
                     description=excluded.description,
@@ -346,7 +438,12 @@ class SQLiteThreadRepository(BaseThreadRepository):
                     priority=excluded.priority,
                     confidence=excluded.confidence,
                     updated_at=excluded.updated_at,
-                    last_activity_at=excluded.last_activity_at;
+                    last_activity_at=excluded.last_activity_at,
+                    original_goal=excluded.original_goal,
+                    current_goal=excluded.current_goal,
+                    last_interaction_at=excluded.last_interaction_at,
+                    deferred_until=excluded.deferred_until,
+                    abandoned_reason=excluded.abandoned_reason;
                 """,
                 (
                     thread.id,
@@ -358,6 +455,11 @@ class SQLiteThreadRepository(BaseThreadRepository):
                     _dt_to_iso(thread.created_at),
                     _dt_to_iso(thread.updated_at),
                     _dt_to_iso(thread.last_activity_at),
+                    thread.original_goal or thread.description,
+                    thread.current_goal or thread.description,
+                    _dt_to_iso(thread.last_interaction_at or thread.last_activity_at),
+                    _dt_to_iso(thread.deferred_until),
+                    thread.abandoned_reason,
                 ),
             )
 
@@ -456,6 +558,30 @@ class SQLiteThreadRepository(BaseThreadRepository):
                         source,
                         ev.description,
                         json.dumps(payload),
+                    ),
+                )
+
+            # 6. Upsert evolutions (M13)
+            for evo in thread.evolutions:
+                self._conn.execute(
+                    """
+                    INSERT INTO intent_evolutions (id, thread_id, previous_goal, revised_goal, reason, timestamp, trigger_event_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                        previous_goal=excluded.previous_goal,
+                        revised_goal=excluded.revised_goal,
+                        reason=excluded.reason,
+                        timestamp=excluded.timestamp,
+                        trigger_event_id=excluded.trigger_event_id;
+                    """,
+                    (
+                        evo.id,
+                        thread.id,
+                        evo.previous_goal,
+                        evo.revised_goal,
+                        evo.reason,
+                        _dt_to_iso(evo.timestamp),
+                        evo.trigger_event_id,
                     ),
                 )
 
@@ -804,6 +930,181 @@ class SQLiteThreadRepository(BaseThreadRepository):
             verified_at=_iso_to_dt(row["verified_at"]) or datetime.now(timezone.utc),
         )
 
+    def add_intent_evolution(self, evolution: IntentEvolution) -> None:
+        assert self._conn is not None
+        with self._conn:
+            self._conn.execute(
+                """
+                INSERT INTO intent_evolutions (id, thread_id, previous_goal, revised_goal, reason, timestamp, trigger_event_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    previous_goal=excluded.previous_goal,
+                    revised_goal=excluded.revised_goal,
+                    reason=excluded.reason,
+                    timestamp=excluded.timestamp,
+                    trigger_event_id=excluded.trigger_event_id;
+                """,
+                (
+                    evolution.id,
+                    evolution.thread_id,
+                    evolution.previous_goal,
+                    evolution.revised_goal,
+                    evolution.reason,
+                    _dt_to_iso(evolution.timestamp),
+                    evolution.trigger_event_id,
+                ),
+            )
+            # Synchronize threads current_goal and updated_at
+            self._conn.execute(
+                """
+                UPDATE threads SET current_goal = ?, updated_at = ?, last_interaction_at = ?
+                WHERE id = ?;
+                """,
+                (
+                    evolution.revised_goal,
+                    _dt_to_iso(evolution.timestamp),
+                    _dt_to_iso(evolution.timestamp),
+                    evolution.thread_id,
+                ),
+            )
+
+    def get_intent_evolutions(self, thread_id: str) -> list[IntentEvolution]:
+        assert self._conn is not None
+        rows = self._conn.execute(
+            "SELECT * FROM intent_evolutions WHERE thread_id = ? ORDER BY timestamp ASC;",
+            (thread_id,),
+        ).fetchall()
+        return [
+            IntentEvolution(
+                id=r["id"],
+                thread_id=r["thread_id"],
+                previous_goal=r["previous_goal"],
+                revised_goal=r["revised_goal"],
+                reason=r["reason"],
+                timestamp=_iso_to_dt(r["timestamp"]) or datetime.now(timezone.utc),
+                trigger_event_id=r["trigger_event_id"],
+            )
+            for r in rows
+        ]
+
+    def set_conversation_checkpoint(
+        self,
+        conversation_id: str,
+        last_seen_at: datetime,
+        checkpoint_event_id: str | None = None,
+    ) -> None:
+        assert self._conn is not None
+        now_iso = _dt_to_iso(datetime.now(timezone.utc))
+        with self._conn:
+            self._conn.execute(
+                """
+                INSERT INTO conversation_checkpoints (conversation_id, last_seen_at, checkpoint_event_id, updated_at)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(conversation_id) DO UPDATE SET
+                    last_seen_at=excluded.last_seen_at,
+                    checkpoint_event_id=excluded.checkpoint_event_id,
+                    updated_at=excluded.updated_at;
+                """,
+                (
+                    conversation_id,
+                    _dt_to_iso(last_seen_at),
+                    checkpoint_event_id,
+                    now_iso,
+                ),
+            )
+
+    def get_conversation_checkpoint(self, conversation_id: str) -> datetime | None:
+        assert self._conn is not None
+        row = self._conn.execute(
+            "SELECT last_seen_at FROM conversation_checkpoints WHERE conversation_id = ?;",
+            (conversation_id,),
+        ).fetchone()
+        if not row:
+            return None
+        return _iso_to_dt(row["last_seen_at"])
+
+    def record_proactive_insight(self, record: ProactiveInsightRecord) -> None:
+        """Persist a proactive insight record for deduplication (M14)."""
+        assert self._conn is not None
+        with self._conn:
+            self._conn.execute(
+                """
+                INSERT OR REPLACE INTO proactive_insights (
+                    insight_id, thread_id, insight_type, state_fingerprint, source_event_ids, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?);
+                """,
+                (
+                    record.insight_id,
+                    record.thread_id,
+                    record.insight_type,
+                    record.state_fingerprint,
+                    json.dumps(record.source_event_ids),
+                    _dt_to_iso(record.created_at),
+                ),
+            )
+
+    def get_proactive_insights(
+        self, thread_id: str | None = None, limit: int = 50
+    ) -> list[ProactiveInsightRecord]:
+        """Retrieve proactive insight records, optionally filtered by thread ID (M14)."""
+        assert self._conn is not None
+        if thread_id:
+            cursor = self._conn.execute(
+                """
+                SELECT insight_id, thread_id, insight_type, state_fingerprint, source_event_ids, created_at
+                FROM proactive_insights
+                WHERE thread_id = ?
+                ORDER BY created_at DESC
+                LIMIT ?;
+                """,
+                (thread_id, limit),
+            )
+        else:
+            cursor = self._conn.execute(
+                """
+                SELECT insight_id, thread_id, insight_type, state_fingerprint, source_event_ids, created_at
+                FROM proactive_insights
+                ORDER BY created_at DESC
+                LIMIT ?;
+                """,
+                (limit,),
+            )
+        rows = cursor.fetchall()
+        results: list[ProactiveInsightRecord] = []
+        for r in rows:
+            created_at = _iso_to_dt(r["created_at"]) or datetime.now(timezone.utc)
+            source_events = []
+            try:
+                source_events = json.loads(r["source_event_ids"])
+            except Exception:
+                pass
+            results.append(
+                ProactiveInsightRecord(
+                    insight_id=r["insight_id"],
+                    thread_id=r["thread_id"],
+                    insight_type=r["insight_type"],
+                    state_fingerprint=r["state_fingerprint"],
+                    source_event_ids=source_events,
+                    created_at=created_at,
+                )
+            )
+        return results
+
+    def is_insight_duplicate(
+        self, thread_id: str, insight_type: str, state_fingerprint: str
+    ) -> bool:
+        """Check if an insight for this thread, type, and state fingerprint already exists (M14)."""
+        assert self._conn is not None
+        row = self._conn.execute(
+            """
+            SELECT 1 FROM proactive_insights
+            WHERE thread_id = ? AND insight_type = ? AND state_fingerprint = ?
+            LIMIT 1;
+            """,
+            (thread_id, insight_type, state_fingerprint),
+        ).fetchone()
+        return row is not None
+
     def count_threads(self) -> int:
         assert self._conn is not None
         row = self._conn.execute("SELECT COUNT(*) AS cnt FROM threads;").fetchone()
@@ -819,6 +1120,9 @@ class SQLiteThreadRepository(BaseThreadRepository):
             self._conn.execute("DELETE FROM commitments;")
             self._conn.execute("DELETE FROM evidence;")
             self._conn.execute("DELETE FROM dependencies;")
+            self._conn.execute("DELETE FROM intent_evolutions;")
+            self._conn.execute("DELETE FROM conversation_checkpoints;")
+            self._conn.execute("DELETE FROM proactive_insights;")
             self._conn.execute("DELETE FROM threads;")
         if seed:
             self._seed_if_empty()
