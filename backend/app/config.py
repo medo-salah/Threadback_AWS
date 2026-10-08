@@ -7,6 +7,7 @@ No secrets are hard-coded here.
 
 from __future__ import annotations
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -58,6 +59,31 @@ class Settings(BaseSettings):
     threadback_mcp_url: str = "http://localhost:8000/mcp"
     aws_region: str = "us-east-1"
     bedrock_model_id: str = "anthropic.claude-3-5-sonnet-20241022-v2:0"
+
+    @model_validator(mode="after")
+    def align_mcp_url(self) -> Settings:
+        """
+        Dynamically align the default loopback MCP URL with the active listening port
+        if not explicitly customized in the environment.
+        """
+        if self.threadback_mcp_url in (
+            "http://localhost:8000/mcp",
+            "http://127.0.0.1:8000/mcp",
+        ):
+            if self.port != 8000:
+                self.threadback_mcp_url = f"http://127.0.0.1:{self.port}/mcp"
+        return self
+
+    @property
+    def client_mcp_url(self) -> str:
+        """
+        Client-facing MCP URL resolution:
+        - In production / deployed environment: '/mcp' (same-origin, relative)
+        - In local development: 'http://localhost:8000/mcp'
+        """
+        if self.app_env.lower() == "production" or self.port != 8000:
+            return "/mcp"
+        return self.threadback_mcp_url
 
     # ---------------------------------------------------------------
     # M9 — Remote MCP, AgentCore Runtime & Alexa+ Auth Settings

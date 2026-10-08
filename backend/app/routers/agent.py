@@ -82,7 +82,7 @@ async def agent_info() -> dict[str, str]:
     """
     return {
         "provider": settings.threadback_agent_provider,
-        "mcp_url": settings.threadback_mcp_url,
+        "mcp_url": settings.client_mcp_url,
         "model_id": settings.bedrock_model_id
         if settings.threadback_agent_provider == "bedrock"
         else "mock",

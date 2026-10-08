@@ -37,7 +37,15 @@ class AgentService:
         mcp_client: ThreadbackMCPClient | None = None,
         conversation_manager: ConversationManager | None = None,
     ) -> None:
-        self.mcp_client = mcp_client or ThreadbackMCPClient(settings.threadback_mcp_url)
+        # Resolve effective loopback MCP endpoint URL (aligning with active port in container/production)
+        effective_mcp_url = settings.threadback_mcp_url
+        if settings.port != 8000 and (
+            "localhost:8000" in effective_mcp_url
+            or "127.0.0.1:8000" in effective_mcp_url
+        ):
+            effective_mcp_url = f"http://127.0.0.1:{settings.port}/mcp"
+
+        self.mcp_client = mcp_client or ThreadbackMCPClient(effective_mcp_url)
         self.conversation_manager = conversation_manager or ConversationManager()
 
         if provider is not None:
@@ -70,6 +78,14 @@ class AgentService:
         )
         session.add_message(role="user", content=message)
 
+        # Align client endpoint if runtime port is non-standard
+        if self.mcp_client and hasattr(self.mcp_client, "endpoint_url"):
+            if settings.port != 8000 and (
+                "localhost:8000" in self.mcp_client.endpoint_url
+                or "127.0.0.1:8000" in self.mcp_client.endpoint_url
+            ):
+                self.mcp_client.endpoint_url = f"http://127.0.0.1:{settings.port}/mcp"
+
         try:
             response = await self.provider.process_message(
                 user_message=message,
@@ -101,9 +117,14 @@ class AgentService:
 
         except MCPConnectionError as exc:
             logger.error("MCP connection error during agent chat: %s", exc)
+            mcp_display = (
+                "/mcp"
+                if settings.app_env.lower() == "production" or settings.port != 8000
+                else self.mcp_client.endpoint_url
+            )
             err_msg = (
                 "The Threadback MCP service is currently unavailable. "
-                f"Please ensure the MCP server is running at {self.mcp_client.endpoint_url}."
+                f"Please ensure the MCP server is running at {mcp_display}."
             )
             session.add_message(role="assistant", content=err_msg, error=True)
             return AgentChatResponse(

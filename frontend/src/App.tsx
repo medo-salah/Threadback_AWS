@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import './App.css'
+import { resolveMcpEndpoint } from './config/mcpEndpoint'
 
 interface ToolActivity {
   tool_name: string
@@ -351,6 +352,7 @@ function App() {
   const [conversationId, setConversationId] = useState<string>('session-default')
   const [pendingProposalId, setPendingProposalId] = useState<string | null>(null)
   const [agentProvider, setAgentProvider] = useState<string>('mock')
+  const [mcpEndpoint, setMcpEndpoint] = useState<string>(resolveMcpEndpoint())
   const [showMilestones, setShowMilestones] = useState(false)
 
   // M14 & M15 State
@@ -460,6 +462,7 @@ function App() {
       .then((res) => res.json())
       .then((data) => {
         if (data.provider) setAgentProvider(data.provider)
+        if (data.mcp_url) setMcpEndpoint(data.mcp_url)
       })
       .catch(() => {})
 
@@ -1595,7 +1598,7 @@ function App() {
         <span className="footer-divider" aria-hidden="true">·</span>
         <span>Proactive Agent Experience &amp; Intent Copilot</span>
         <span className="footer-divider" aria-hidden="true">·</span>
-        <span>MCP Streamable HTTP (2025-11-25)</span>
+        <span title={`MCP Endpoint: ${mcpEndpoint}`}>MCP: {mcpEndpoint} (2025-11-25)</span>
         <span className="footer-divider" aria-hidden="true">·</span>
         <span>Grounded Deterministic Boundaries</span>
       </footer>

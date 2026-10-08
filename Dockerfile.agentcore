@@ -34,7 +34,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     APP_ENV=production \
     THREADBACK_AGENT_PROVIDER=mock \
     AUTH_ENABLED=false \
-    FRONTEND_DIST_DIR=/app/frontend-dist
+    FRONTEND_DIST_DIR=/app/frontend-dist \
+    THREADBACK_MCP_URL=http://127.0.0.1:8080/mcp
 
 WORKDIR /app
 
@@ -61,4 +62,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD curl -f http://localhost:${PORT:-8080}/health || exit 1
 
 # Launch FastAPI ASGI application via Uvicorn
-CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080} --log-level info"]
+CMD ["sh", "-c", "export THREADBACK_MCP_URL=http://127.0.0.1:${PORT:-8080}/mcp && exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080} --log-level info"]
