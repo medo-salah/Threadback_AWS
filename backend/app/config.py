@@ -47,6 +47,11 @@ class Settings(BaseSettings):
     cors_origins: list[str] = ["http://localhost:5173", "http://localhost:3000"]
 
     # ---------------------------------------------------------------
+    # Frontend Static Files (M16 Production Serving)
+    # ---------------------------------------------------------------
+    frontend_dist_dir: str | None = None
+
+    # ---------------------------------------------------------------
     # M8 — Agent & Bedrock Settings
     # ---------------------------------------------------------------
     threadback_agent_provider: str = "mock"  # mock | bedrock

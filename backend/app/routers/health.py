@@ -1,7 +1,7 @@
 """
 Health check router.
 
-Exposes GET / and GET /health — lightweight liveness probes with no external dependencies.
+Exposes GET /health — lightweight liveness probe with no external dependencies.
 """
 
 from __future__ import annotations
@@ -17,37 +17,13 @@ router = APIRouter(tags=["health"])
 
 
 class HealthResponse(BaseModel):
-    """Response schema for GET / and GET /health."""
+    """Response schema for GET /health."""
 
     status: str
     app: str
     version: str
     environment: str
     timestamp: str
-
-
-@router.get(
-    "/",
-    response_model=HealthResponse,
-    summary="Root endpoint",
-    description="Returns the application status. Alias for /health.",
-)
-def root() -> HealthResponse:
-    """
-    Root endpoint — alias for /health.
-
-    - No database dependency
-    - No LLM dependency
-    - No external API dependency
-    - Deterministic response (timestamp varies, all other fields are constant)
-    """
-    return HealthResponse(
-        status="healthy",
-        app=settings.app_name,
-        version=settings.app_version,
-        environment=settings.app_env,
-        timestamp=datetime.now(timezone.utc).isoformat(),
-    )
 
 
 @router.get(
@@ -76,4 +52,3 @@ def health_check() -> HealthResponse:
         environment=settings.app_env,
         timestamp=datetime.now(timezone.utc).isoformat(),
     )
-

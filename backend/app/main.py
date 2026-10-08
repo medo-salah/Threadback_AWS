@@ -35,10 +35,13 @@ from __future__ import annotations
 
 import contextlib
 from collections.abc import AsyncIterator
+from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from starlette.applications import Starlette
 from starlette.types import ASGIApp, Receive, Scope, Send
 
@@ -158,6 +161,113 @@ _fastapi_app.include_router(agent.router)
 _fastapi_app.include_router(oauth_metadata.router)
 _fastapi_app.include_router(proactive.router)
 _fastapi_app.include_router(copilot.router)
+
+# ---------------------------------------------------------------------------
+# Frontend Static Files & SPA Serving (M16 Production Serving)
+# ---------------------------------------------------------------------------
+
+
+def _resolve_frontend_dist() -> Path | None:
+    """Locate the built frontend directory containing index.html."""
+    candidates: list[Path] = []
+
+    if settings.frontend_dist_dir:
+        candidates.append(Path(settings.frontend_dist_dir))
+
+    # Production container standard paths
+    candidates.append(Path("/app/frontend-dist"))
+    candidates.append(Path("/app/frontend/dist"))
+
+    # Relative to this source file:
+    # 1. Standard repo root: <repo_root>/frontend/dist
+    repo_dist = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
+    candidates.append(repo_dist)
+
+    # 2. Container layout if app is placed at /app/app: /app/frontend-dist
+    container_dist = Path(__file__).resolve().parent.parent / "frontend-dist"
+    candidates.append(container_dist)
+    container_frontend_dist = (
+        Path(__file__).resolve().parent.parent / "frontend" / "dist"
+    )
+    candidates.append(container_frontend_dist)
+
+    # 3. Relative to current working directory
+    cwd = Path.cwd()
+    candidates.append(cwd / "frontend-dist")
+    candidates.append(cwd / "frontend" / "dist")
+    candidates.append(cwd / "dist")
+
+    for candidate in candidates:
+        if candidate.is_dir() and (candidate / "index.html").is_file():
+            return candidate.resolve()
+
+    return None
+
+
+_frontend_dist = _resolve_frontend_dist()
+
+if _frontend_dist and (_frontend_dist / "index.html").is_file():
+    _index_html = _frontend_dist / "index.html"
+    _assets_dir = _frontend_dist / "assets"
+
+    if _assets_dir.is_dir():
+        _fastapi_app.mount(
+            "/assets",
+            StaticFiles(directory=str(_assets_dir)),
+            name="static-assets",
+        )
+
+    @_fastapi_app.get("/", include_in_schema=False)
+    async def serve_root() -> FileResponse:
+        """Serve the built React/Vite Threadback single-page application."""
+        return FileResponse(_index_html)
+
+    @_fastapi_app.get("/{full_path:path}", include_in_schema=False)
+    async def serve_spa_or_file(full_path: str) -> FileResponse:
+        """
+        Serve static files from frontend/dist (e.g. favicon.svg) or fallback
+        to index.html for client-side SPA routing.
+
+        Explicitly preserves 404 for missing API, MCP, health, docs, and metadata endpoints.
+        """
+        reserved_prefixes = (
+            "api/",
+            "api",
+            "mcp",
+            "health",
+            ".well-known",
+            "docs",
+            "redoc",
+            "openapi.json",
+        )
+        if any(
+            full_path == p or full_path.startswith(f"{p}/") for p in reserved_prefixes
+        ):
+            raise HTTPException(status_code=404, detail="Not Found")
+
+        # Check if requested path is a real static file in frontend/dist
+        candidate_file = (_frontend_dist / full_path).resolve()
+        try:
+            candidate_file.relative_to(_frontend_dist)
+            if candidate_file.is_file():
+                return FileResponse(candidate_file)
+        except ValueError:
+            pass
+
+        # SPA client-side route fallback
+        return FileResponse(_index_html)
+
+else:
+
+    @_fastapi_app.get("/", include_in_schema=False)
+    async def serve_root_fallback() -> dict[str, str]:
+        """Development fallback when frontend build does not yet exist."""
+        return {
+            "message": "Threadback backend is running. Build frontend with 'npm run build' in frontend/ to serve the UI.",
+            "health": "/health",
+            "docs": "/docs",
+        }
+
 
 # ---------------------------------------------------------------------------
 # ASGI application entry point

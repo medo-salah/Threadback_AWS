@@ -1,5 +1,5 @@
 # =============================================================================
-# Threadback Production Multi-Stage Dockerfile (M16 Deployment & AgentCore)
+# Threadback Production Multi-Stage Dockerfile (M16 Deployment)
 #
 # Stage 1: Build the React 19 + TypeScript + Vite frontend
 # Stage 2: Python 3.10 runtime serving FastAPI + MCP + React static assets
